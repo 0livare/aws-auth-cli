@@ -1,4 +1,5 @@
 import chalk from 'chalk'
+import type {ProfileInfo} from './credentials'
 
 const tty = process.stderr
 
@@ -6,7 +7,7 @@ const HEADER_LINES = 2 // blank line + "Select a profile" line
 const FOOTER_LINES = 2 // blank line + hint line
 
 export async function selectProfile(
-  profiles: string[],
+  profiles: ProfileInfo[],
   current?: string,
 ): Promise<string | null> {
   if (profiles.length === 0) {
@@ -14,7 +15,7 @@ export async function selectProfile(
     return null
   }
 
-  let cursor = profiles.findIndex((p) => p === current)
+  let cursor = profiles.findIndex((p) => p.name === current)
   if (cursor < 0) cursor = 0
 
   const totalLines = HEADER_LINES + profiles.length + FOOTER_LINES
@@ -28,9 +29,13 @@ export async function selectProfile(
     tty.write(chalk.bold('  Select a profile\n'))
 
     for (let i = 0; i < profiles.length; i++) {
-      const isCurrent = profiles[i] === current
+      const {name, accountId} = profiles[i]
+      const isCurrent = name === current
       const isSelected = i === cursor
-      const label = profiles[i] + (isCurrent ? chalk.dim('  (active)') : '')
+
+      const account = accountId ? chalk.dim(`  (${accountId})`) : ''
+      const active = isCurrent ? chalk.dim('  (active)') : ''
+      const label = name + account + active
 
       if (isSelected) {
         tty.write(chalk.cyan(`  ❯  ${chalk.bold(label)}\n`))
@@ -73,7 +78,7 @@ export async function selectProfile(
           break
         case '\r': // enter
           cleanup()
-          resolve(profiles[cursor])
+          resolve(profiles[cursor].name)
           break
         case '\x03': // ctrl+c
         case '\x1b': // esc

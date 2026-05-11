@@ -1,17 +1,57 @@
 import {homedir} from 'os'
 import {join} from 'path'
 
-export async function getProfiles(): Promise<string[]> {
+export type ProfileInfo = {
+  name: string
+  accountId?: string
+}
+
+export async function getProfiles(): Promise<ProfileInfo[]> {
   const credFile = Bun.file(join(homedir(), '.aws', 'credentials'))
   if (!(await credFile.exists())) return []
 
-  const text = await credFile.text()
-  const profiles: string[] = []
-  for (const line of text.split('\n')) {
+  // Collect profile names in order from credentials file
+  const names: string[] = []
+  for (const line of (await credFile.text()).split('\n')) {
     const match = line.match(/^\[([^\]]+)\]/)
-    if (match) profiles.push(match[1])
+    if (match) names.push(match[1])
   }
-  return profiles
+
+  // Parse role_arns from both files (credentials + config)
+  const roleArns: Record<string, string> = {}
+  await parseRoleArns(join(homedir(), '.aws', 'credentials'), roleArns, false)
+  await parseRoleArns(join(homedir(), '.aws', 'config'), roleArns, true)
+
+  return names.map((name) => ({
+    name,
+    accountId: extractAccountId(roleArns[name]),
+  }))
+}
+
+async function parseRoleArns(
+  filePath: string,
+  out: Record<string, string>,
+  isConfig: boolean,
+) {
+  const file = Bun.file(filePath)
+  if (!(await file.exists())) return
+
+  let section: string | null = null
+  for (const line of (await file.text()).split('\n')) {
+    const sectionMatch = line.match(/^\[(.+)\]/)
+    if (sectionMatch) {
+      let name = sectionMatch[1].trim()
+      if (isConfig && name.startsWith('profile ')) name = name.slice(8).trim()
+      section = name
+    } else if (section) {
+      const kv = line.match(/^role_arn\s*=\s*(.+)/)
+      if (kv) out[section] = kv[1].trim()
+    }
+  }
+}
+
+function extractAccountId(roleArn?: string): string | undefined {
+  return roleArn?.match(/arn:aws:iam::(\d+):/)?.[1]
 }
 
 export async function getConfigValue(

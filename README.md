@@ -9,11 +9,11 @@ bun install
 bun link          # makes `aws-auth` available globally
 ```
 
-## Zsh setup
-
-Because a subprocess can't modify its parent shell's environment, add this wrapper to your `~/.zshrc`. It evals the shell commands that `aws-auth` writes to stdout:
+In order to allow this tool to modify your shell environment (a subprocess can't modify its parent shell's environment) add this wrapper to your `~/.zshrc`:
 
 ```zsh
+# Wrapper to allow the aws-auth CLI tool to modify the current shell environment
+# See: github.com/0livare/aws-auth
 aws-auth() { eval "$(command aws-auth "$@")"; }
 ```
 
