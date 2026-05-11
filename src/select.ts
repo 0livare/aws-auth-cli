@@ -3,7 +3,7 @@ import type {ProfileInfo} from './credentials'
 
 const tty = process.stderr
 
-const HEADER_LINES = 2 // blank line + "Select a profile" line
+const HEADER_LINES = 3 // current profile line + blank line + "Select a profile" line
 const FOOTER_LINES = 2 // blank line + hint line
 
 export async function selectProfile(
@@ -25,6 +25,8 @@ export async function selectProfile(
       tty.write(`\x1b[${totalLines}A\x1b[J`)
     }
 
+    const currentLabel = current ? chalk.cyan(current) : chalk.dim('none')
+    tty.write(`  ${chalk.dim('Current:')}  ${currentLabel}\n`)
     tty.write('\n')
     tty.write(chalk.bold('  Select a profile\n'))
 

@@ -30,7 +30,7 @@ export function help() {
   say()
   say(chalk.bold('Flags:'))
   say(
-    `  ${chalk.cyan('-t')}, ${chalk.cyan('--token')} ${chalk.cyan('<code>')}               MFA token code for role assumption`,
+    `  ${chalk.cyan('-t')}, ${chalk.cyan('--token')} ${chalk.cyan('<code>')}               MFA token code (bypasses 1Password)`,
   )
   say(
     `  ${chalk.cyan('--clear')}                           Unset AWS_PROFILE and AWS_DEFAULT_PROFILE`,
