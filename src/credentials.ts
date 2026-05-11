@@ -22,11 +22,24 @@ export async function getProfiles(): Promise<ProfileInfo[]> {
   await parseRoleArns(join(homedir(), '.aws', 'credentials'), roleArns, false)
   await parseRoleArns(join(homedir(), '.aws', 'config'), roleArns, true)
 
-  return names
-    .filter((name) => !name.endsWith('-mfa'))
+  const allNames = new Set(names)
+  const seen = new Set<string>()
+  const uniqueNames: string[] = []
+  for (const name of names) {
+    // Hide non-mfa entries that have a -mfa counterpart — they're auto-created
+    // cached credential sections and would just duplicate the -mfa config entry.
+    if (!name.endsWith('-mfa') && allNames.has(`${name}-mfa`)) continue
+    if (!seen.has(name)) {
+      seen.add(name)
+      uniqueNames.push(name)
+    }
+  }
+
+  return uniqueNames
+    .filter((name) => roleArns[name] ?? roleArns[`${name}-mfa`])
     .map((name) => ({
     name,
-    accountId: extractAccountId(roleArns[name]),
+    accountId: extractAccountId(roleArns[name] ?? roleArns[`${name}-mfa`]),
   }))
 }
 
