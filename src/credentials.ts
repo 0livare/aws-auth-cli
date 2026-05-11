@@ -22,7 +22,9 @@ export async function getProfiles(): Promise<ProfileInfo[]> {
   await parseRoleArns(join(homedir(), '.aws', 'credentials'), roleArns, false)
   await parseRoleArns(join(homedir(), '.aws', 'config'), roleArns, true)
 
-  return names.map((name) => ({
+  return names
+    .filter((name) => !name.endsWith('-mfa'))
+    .map((name) => ({
     name,
     accountId: extractAccountId(roleArns[name]),
   }))
