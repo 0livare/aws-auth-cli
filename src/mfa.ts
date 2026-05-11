@@ -1,6 +1,6 @@
 import {homedir} from 'os'
 import {join} from 'path'
-import chalk from 'chalk'
+import chalk from './chalk'
 import {getConfigValue} from './credentials'
 
 type OpAccount = {url: string; email: string; user_uuid: string}

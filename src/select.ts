@@ -1,4 +1,4 @@
-import chalk from 'chalk'
+import chalk from './chalk'
 import type {ProfileInfo} from './credentials'
 
 const tty = process.stderr

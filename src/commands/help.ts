@@ -1,4 +1,4 @@
-import chalk from 'chalk'
+import chalk from '../chalk'
 import pkg from '../../package.json'
 
 const say = (s = '') => process.stderr.write(s + '\n')

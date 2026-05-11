@@ -1,6 +1,6 @@
 import {homedir} from 'os'
 import {join} from 'path'
-import chalk from 'chalk'
+import chalk from './chalk'
 
 export async function showTokenStatus(profile: string): Promise<void> {
   const expiryFile = join(homedir(), '.aws', 'expiry', profile)
