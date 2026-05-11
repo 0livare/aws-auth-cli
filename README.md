@@ -1,19 +1,31 @@
-# AWS Auth Helper
+# AWS Auth Helper CLI
 
-A CLI to replace the `aws-profile` function in `~/.zshrc`. Reads available profiles from `~/.aws/credentials` and lets you select one from an interactive list, with full MFA / `sts assume-role` support and automatic TOTP retrieval from 1Password.
+A CLI to make authenticating with AWS in the command line easier. It reads available profiles from `~/.aws/credentials` and lets you select one from an interactive list, with full MFA / `sts assume-role` support and automatic TOTP retrieval from 1Password.
 
 ## Installation
 
-```sh
+<!-- > ### Prerequisites
+>
+> 1. This package depends on Bun being [installed globally](https://bun.sh/docs/installation)
+> 1. Claude Code must be must be [installed and configured](https://code.claude.com/docs/en/quickstart#step-1:-install-claude-code)
+
+```bash
+# Create a global `ralph` cli command
+npm i -g aws-auth-cli
+``` -->
+
+Clone this repo, then:
+
+```bash
 bun install
-bun link          # makes `aws-auth` available globally
+bun link     # makes `aws-auth` available globally
 ```
 
 In order to allow this tool to modify your shell environment (a subprocess can't modify its parent shell's environment) add this wrapper to your `~/.zshrc`:
 
 ```zsh
-# Wrapper to allow the aws-auth CLI tool to modify the current shell environment
-# See: github.com/0livare/aws-auth
+# Wrapper to allow the aws-auth-cli tool to modify the current shell environment
+# See: https://github.com/0livare/aws-auth-cli
 aws-auth() { eval "$(command aws-auth "$@")"; }
 ```
 
@@ -22,6 +34,7 @@ aws-auth() { eval "$(command aws-auth "$@")"; }
 `aws-auth` can automatically fetch your MFA TOTP code from 1Password so you never have to type it manually.
 
 **Requirements:**
+
 1. [1Password CLI](https://developer.1password.com/docs/cli) installed
 2. Signed in to the CLI: `op signin` (required — `op item get` won't work without it)
 
@@ -56,4 +69,3 @@ aws-auth <profile> -t <token>
 # Unset the current profile
 aws-auth --clear
 ```
-
