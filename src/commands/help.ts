@@ -1,40 +1,55 @@
 import chalk from 'chalk'
 import pkg from '../../package.json'
 
-export function help() {
-  console.info('\n' + pkg.description + '\n')
+const say = (s = '') => process.stderr.write(s + '\n')
 
-  console.info(
+export function help() {
+  say()
+  say(pkg.description)
+  say()
+
+  say(
     `${chalk.bold('Usage:')} ${chalk.bold.green('aws-auth')} ${chalk.cyan('[profile]')} ${chalk.cyan('[flags]')}`,
   )
 
-  // Examples
-  console.info(`\n${chalk.bold('Examples:')}`)
-  console.info(
-    `  ${chalk.bold.green('aws-auth')}                              Show current AWS profile`,
+  say()
+  say(chalk.bold('Examples:'))
+  say(
+    `  ${chalk.bold.green('aws-auth')}                              Interactive profile selector`,
   )
-  console.info(
+  say(
     `  ${chalk.bold.green('aws-auth')} ${chalk.cyan('<profile>')}                    Set profile and show token status`,
   )
-  console.info(
+  say(
     `  ${chalk.bold.green('aws-auth')} ${chalk.cyan('<profile>')} ${chalk.cyan('-t')} ${chalk.cyan('<token>')}          Set profile and assume role via MFA`,
   )
-  console.info(
+  say(
     `  ${chalk.bold.green('aws-auth')} ${chalk.cyan('--clear')}                       Unset the current profile`,
   )
 
-  // Flags
-  console.info(`\n${chalk.bold('Flags:')}`)
-  console.info(
+  say()
+  say(chalk.bold('Flags:'))
+  say(
     `  ${chalk.cyan('-t')}, ${chalk.cyan('--token')} ${chalk.cyan('<code>')}               MFA token code for role assumption`,
   )
-  console.info(
+  say(
     `  ${chalk.cyan('--clear')}                           Unset AWS_PROFILE and AWS_DEFAULT_PROFILE`,
   )
-  console.info(
+  say(
     `  ${chalk.cyan('-v')}, ${chalk.cyan('--version')}                       Print version number`,
   )
-  console.info(
+  say(
     `  ${chalk.cyan('-h')}, ${chalk.cyan('--help')}                          Print help information`,
   )
+
+  say()
+  say(chalk.bold('Zsh setup:'))
+  say(
+    chalk.dim('  Add to ~/.zshrc so the profile is set in your current shell:'),
+  )
+  say()
+  say(
+    `  ${chalk.yellow('aws-auth()')} ${chalk.yellow('{')} eval ${chalk.green('"$(command aws-auth "$@")"')}${chalk.yellow('}')}`,
+  )
+  say()
 }

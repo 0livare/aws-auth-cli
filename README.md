@@ -1,7 +1,34 @@
 # AWS Auth Helper
 
-A cli to replace the `aws-profile` function in `~/.zshrc` that:
+A CLI to replace the `aws-profile` function in `~/.zshrc`. Reads available profiles from `~/.aws/credentials` and lets you select one from an interactive list, with full MFA / `sts assume-role` support.
 
-1. Reads available accounts from the `~/.aws/credentials` file and lets you select one from a list.
-2. Replicates the rest of the functionality of the original `aws-profile` function, including showing the current profile and unsetting it, with better help documentation.
-3. Written in bun
+## Installation
+
+```sh
+bun install
+bun link          # makes `aws-auth` available globally
+```
+
+## Zsh setup
+
+Because a subprocess can't modify its parent shell's environment, add this wrapper to your `~/.zshrc`. It evals the shell commands that `aws-auth` writes to stdout:
+
+```zsh
+aws-auth() { eval "$(command aws-auth "$@")"; }
+```
+
+## Usage
+
+```sh
+# Interactive profile selector (reads ~/.aws/credentials)
+aws-auth
+
+# Set a profile and show its token status
+aws-auth <profile>
+
+# Set a profile and assume its role via MFA
+aws-auth <profile> -t <token>
+
+# Unset the current profile
+aws-auth --clear
+```

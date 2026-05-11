@@ -5,16 +5,12 @@ export function parseCliArgs() {
   let args
   try {
     args = parseArgs({
-      args: Bun.argv,
+      args: process.argv.slice(2),
       options: {
-        'max-iterations': {type: 'string', short: 'i'},
-        sequential: {type: 'boolean', short: 's'},
+        token: {type: 'string', short: 't'},
+        clear: {type: 'boolean'},
         help: {type: 'boolean', short: 'h'},
         version: {type: 'boolean', short: 'v'},
-        message: {type: 'string', short: 'm'},
-        file: {type: 'string', short: 'f'},
-        sample: {type: 'boolean'},
-        override: {type: 'boolean'},
       },
       strict: true,
       allowPositionals: true,
