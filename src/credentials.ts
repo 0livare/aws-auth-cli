@@ -38,9 +38,9 @@ export async function getProfiles(): Promise<ProfileInfo[]> {
   return uniqueNames
     .filter((name) => roleArns[name] ?? roleArns[`${name}-mfa`])
     .map((name) => ({
-    name,
-    accountId: extractAccountId(roleArns[name] ?? roleArns[`${name}-mfa`]),
-  }))
+      name,
+      accountId: extractAccountId(roleArns[name] ?? roleArns[`${name}-mfa`]),
+    }))
 }
 
 async function parseRoleArns(

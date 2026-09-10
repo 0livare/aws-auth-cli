@@ -1,17 +1,18 @@
 import {homedir} from 'os'
 import {join} from 'path'
+import {createInterface} from 'readline/promises'
 import chalk from './chalk'
 import {getConfigValue} from './credentials'
 
 type OpAccount = {url: string; email: string; user_uuid: string}
 
 async function getOpAccount(): Promise<OpAccount | null> {
-  const proc = Bun.spawn(['op', 'whoami', '--format', 'json'], {
-    stdout: 'pipe',
-    stderr: 'pipe',
-  })
-  if ((await proc.exited) !== 0) return null
   try {
+    const proc = Bun.spawn(['op', 'whoami', '--format', 'json'], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    })
+    if ((await proc.exited) !== 0) return null
     return JSON.parse(await new Response(proc.stdout).text())
   } catch {
     return null
@@ -23,39 +24,65 @@ async function getOpAccount(): Promise<OpAccount | null> {
  * Returns null if op is not available, not signed in, or the item isn't found.
  */
 async function getOpToken(opItem: string): Promise<string | null> {
-  const proc = Bun.spawn(['op', 'item', 'get', opItem, '--otp'], {
-    stdout: 'pipe',
-    stderr: 'pipe',
-  })
-  const exitCode = await proc.exited
-  if (exitCode !== 0) {
-    const err = (await new Response(proc.stderr).text()).trim()
-    if (err.includes('not found') || err.includes("isn't an item")) {
-      process.stderr.write(
-        chalk.red(`  ✖  1Password item "${opItem}" not found\n`),
-      )
-    } else if (
-      err.includes('not currently signed in') ||
-      err.includes('sign in')
-    ) {
-      process.stderr.write(
-        chalk.red(`  ✖  Not signed in to 1Password — run: op signin\n`),
-      )
-    } else if (
-      err.includes('command not found') ||
-      err.includes('No such file')
-    ) {
-      process.stderr.write(
-        chalk.red(
-          `  ✖  1Password CLI not found — install it: https://developer.1password.com/docs/cli\n`,
-        ),
-      )
-    } else {
-      process.stderr.write(chalk.red(`  ✖  1Password error: ${err}\n`))
+  try {
+    const proc = Bun.spawn(['op', 'item', 'get', opItem, '--otp'], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    })
+    const exitCode = await proc.exited
+    if (exitCode !== 0) {
+      const err = (await new Response(proc.stderr).text()).trim()
+      if (err.includes('not found') || err.includes("isn't an item")) {
+        process.stderr.write(
+          chalk.red(`  ✖  1Password item "${opItem}" not found\n`),
+        )
+      } else if (
+        err.includes('not currently signed in') ||
+        err.includes('sign in')
+      ) {
+        process.stderr.write(
+          chalk.red(`  ✖  Not signed in to 1Password — run: op signin\n`),
+        )
+      } else {
+        process.stderr.write(chalk.red(`  ✖  1Password error: ${err}\n`))
+      }
+      return null
     }
+    return (await new Response(proc.stdout).text()).trim() || null
+  } catch {
+    process.stderr.write(
+      chalk.red(
+        `  ✖  1Password CLI not found — install it: https://developer.1password.com/docs/cli\n`,
+      ),
+    )
     return null
   }
-  return (await new Response(proc.stdout).text()).trim() || null
+}
+
+async function promptForToken(): Promise<string | null> {
+  if (!process.stdin.isTTY) {
+    process.stderr.write(
+      chalk.red('  ✖  Cannot prompt for an MFA token without a terminal\n'),
+    )
+    return null
+  }
+
+  const readline = createInterface({
+    input: process.stdin,
+    output: process.stderr,
+  })
+
+  try {
+    while (true) {
+      const token = (
+        await readline.question('  Enter MFA token manually: ')
+      ).trim()
+      if (/^\d{6}$/.test(token)) return token
+      process.stderr.write(chalk.yellow('  MFA token must be 6 digits\n'))
+    }
+  } finally {
+    readline.close()
+  }
 }
 
 export async function assumeRoleWithMfa(
@@ -72,7 +99,10 @@ export async function assumeRoleWithMfa(
     const opItem = opItemProfile ?? opItemDefault
 
     if (!opItem) {
-      const checked = opItemProfile === null ? `[${mfaProfile}] and [default]` : `[${mfaProfile}]`
+      const checked =
+        opItemProfile === null
+          ? `[${mfaProfile}] and [default]`
+          : `[${mfaProfile}]`
       process.stderr.write(
         chalk.dim(`  No op_item found in ${checked} — skipping MFA\n`),
       )
@@ -81,7 +111,9 @@ export async function assumeRoleWithMfa(
 
     const source = opItemProfile ? `[${mfaProfile}]` : '[default]'
     process.stderr.write(
-      chalk.dim(`  Fetching MFA token from 1Password (item: ${chalk.white(opItem)}, config: ${source})...\n`),
+      chalk.dim(
+        `  Fetching MFA token from 1Password (item: ${chalk.white(opItem)}, config: ${source})...\n`,
+      ),
     )
 
     const [opToken, account] = await Promise.all([
@@ -89,18 +121,26 @@ export async function assumeRoleWithMfa(
       getOpAccount(),
     ])
 
-    if (!opToken) return 'error'
-    resolvedToken = opToken
+    if (opToken) {
+      resolvedToken = opToken
 
-    const accountStr = account
-      ? `${account.email}  id: ${account.user_uuid}`
-      : 'unknown account'
-    process.stderr.write(
-      chalk.dim(`  Token: ${chalk.white(resolvedToken)}  ·  Account: ${accountStr}\n`),
-    )
+      const accountStr = account
+        ? `${account.email}  id: ${account.user_uuid}`
+        : 'unknown account'
+      process.stderr.write(
+        chalk.dim(
+          `  Token: ${chalk.white(resolvedToken)}  ·  Account: ${accountStr}\n`,
+        ),
+      )
+    } else {
+      resolvedToken = (await promptForToken()) ?? undefined
+      if (!resolvedToken) return 'error'
+    }
   } else {
     process.stderr.write(
-      chalk.dim(`  Using manual token (bypassing 1Password): ${chalk.white(token)}\n`),
+      chalk.dim(
+        `  Using manual token (bypassing 1Password): ${chalk.white(token)}\n`,
+      ),
     )
   }
 
