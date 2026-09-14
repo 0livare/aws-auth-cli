@@ -9,7 +9,7 @@ export async function showTokenStatus(profile: string): Promise<void> {
   if (!(await file.exists())) {
     process.stderr.write(
       chalk.yellow(
-        `  ⚠  [${profile}] no token — reauth: aws-auth ${profile} -t <token>\n`,
+        `  ⚠  [${profile}] no token — reauth: aws-auth <token> -p ${profile}\n`,
       ),
     )
     return
@@ -22,7 +22,7 @@ export async function showTokenStatus(profile: string): Promise<void> {
   if (remaining <= 0) {
     process.stderr.write(
       chalk.yellow(
-        `  ⚠  [${profile}] token expired — reauth: aws-auth ${profile} -t <token>\n`,
+        `  ⚠  [${profile}] token expired — reauth: aws-auth <token> -p ${profile}\n`,
       ),
     )
   } else {

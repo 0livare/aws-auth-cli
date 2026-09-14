@@ -9,7 +9,7 @@ export function help() {
   say()
 
   say(
-    `${chalk.bold('Usage:')} ${chalk.bold.green('aws-auth')} ${chalk.cyan('[profile]')} ${chalk.cyan('[flags]')}`,
+    `${chalk.bold('Usage:')} ${chalk.bold.green('aws-auth')} ${chalk.cyan('[token]')} ${chalk.cyan('[flags]')}`,
   )
 
   say()
@@ -18,10 +18,13 @@ export function help() {
     `  ${chalk.bold.green('aws-auth')}                              Interactive profile selector`,
   )
   say(
-    `  ${chalk.bold.green('aws-auth')} ${chalk.cyan('<profile>')}                    Set profile and show token status`,
+    `  ${chalk.bold.green('aws-auth')} ${chalk.cyan('<token>')}                      Select profile and assume role via MFA`,
   )
   say(
-    `  ${chalk.bold.green('aws-auth')} ${chalk.cyan('<profile>')} ${chalk.cyan('-t')} ${chalk.cyan('<token>')}          Set profile and assume role via MFA`,
+    `  ${chalk.bold.green('aws-auth')} ${chalk.cyan('-p')} ${chalk.cyan('<profile>')}                 Set profile and show token status`,
+  )
+  say(
+    `  ${chalk.bold.green('aws-auth')} ${chalk.cyan('<token>')} ${chalk.cyan('-p')} ${chalk.cyan('<profile>')}         Set profile and assume role via MFA`,
   )
   say(
     `  ${chalk.bold.green('aws-auth')} ${chalk.cyan('--clear')}                       Unset the current profile`,
@@ -30,7 +33,7 @@ export function help() {
   say()
   say(chalk.bold('Flags:'))
   say(
-    `  ${chalk.cyan('-t')}, ${chalk.cyan('--token')} ${chalk.cyan('<code>')}               MFA token code (bypasses 1Password)`,
+    `  ${chalk.cyan('-p')}, ${chalk.cyan('--profile')} ${chalk.cyan('<profile>')}           AWS profile`,
   )
   say(
     `  ${chalk.cyan('--clear')}                           Unset AWS_PROFILE and AWS_DEFAULT_PROFILE`,

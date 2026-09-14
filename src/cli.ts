@@ -7,7 +7,7 @@ export function parseCliArgs() {
     args = parseArgs({
       args: process.argv.slice(2),
       options: {
-        token: {type: 'string', short: 't'},
+        profile: {type: 'string', short: 'p'},
         clear: {type: 'boolean'},
         help: {type: 'boolean', short: 'h'},
         version: {type: 'boolean', short: 'v'},

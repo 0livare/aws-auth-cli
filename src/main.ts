@@ -25,12 +25,13 @@ async function main() {
     process.exit(0)
   }
 
-  const profile = cli.positionals[0]
+  const token = cli.positionals[0]
+  const profile = cli.values.profile
 
   async function handleProfile(raw: string) {
     // Strip -mfa suffix so "staging-mfa" and "staging" behave identically
     const p = raw.replace(/-mfa$/, '')
-    const result = await assumeRoleWithMfa(p, cli.values.token)
+    const result = await assumeRoleWithMfa(p, token)
     if (result === 'error') process.exit(1)
     if (result === 'skip') await showTokenStatus(p)
     process.stdout.write(`export AWS_PROFILE=${p}; unset AWS_DEFAULT_PROFILE\n`)

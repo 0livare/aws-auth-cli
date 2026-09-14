@@ -52,7 +52,7 @@ source_profile = default
 op_item = AWS Staging MFA   # overrides [default] for this profile only
 ```
 
-With this configured, `aws-auth <profile>` will automatically assume the role — no `-t` flag needed. If 1Password cannot provide the token, the CLI prompts you to enter the six-digit MFA code manually.
+With this configured, `aws-auth -p <profile>` will automatically assume the role — no token argument needed. If 1Password cannot provide the token, the CLI prompts you to enter the six-digit MFA code manually.
 
 ## Usage
 
@@ -60,11 +60,14 @@ With this configured, `aws-auth <profile>` will automatically assume the role �
 # Interactive profile selector (reads ~/.aws/credentials)
 aws-auth
 
+# Select a profile interactively and use a manual MFA token
+aws-auth <token>
+
 # Set a profile — auto-assumes role via 1Password MFA if op_item is configured
-aws-auth <profile>
+aws-auth -p <profile>
 
 # Set a profile and assume its role with a manual MFA token (bypasses 1Password)
-aws-auth <profile> -t <token>
+aws-auth <token> -p <profile>
 
 # Unset the current profile
 aws-auth --clear
