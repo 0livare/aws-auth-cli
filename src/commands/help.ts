@@ -24,6 +24,9 @@ export function help() {
     `  ${chalk.bold.green('aws-auth')} ${chalk.cyan('-p')} ${chalk.cyan('<profile>')}                 Set profile and show token status`,
   )
   say(
+    `  ${chalk.bold.green('aws-auth')} ${chalk.cyan('-p')} ${chalk.cyan('<account-id>')}              Select a profile by AWS account ID`,
+  )
+  say(
     `  ${chalk.bold.green('aws-auth')} ${chalk.cyan('<token>')} ${chalk.cyan('-p')} ${chalk.cyan('<profile>')}         Set profile and assume role via MFA`,
   )
   say(
@@ -33,7 +36,7 @@ export function help() {
   say()
   say(chalk.bold('Flags:'))
   say(
-    `  ${chalk.cyan('-p')}, ${chalk.cyan('--profile')} ${chalk.cyan('<profile>')}           AWS profile`,
+    `  ${chalk.cyan('-p')}, ${chalk.cyan('--profile')} ${chalk.cyan('<profile>')}           AWS profile name or 12-digit account ID`,
   )
   say(
     `  ${chalk.cyan('--clear')}                           Unset AWS_PROFILE and AWS_DEFAULT_PROFILE`,

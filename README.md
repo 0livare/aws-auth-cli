@@ -66,9 +66,21 @@ aws-auth <token>
 # Set a profile — auto-assumes role via 1Password MFA if op_item is configured
 aws-auth -p <profile>
 
+# Select a profile by its 12-digit AWS account ID
+aws-auth -p 342327770208
+
 # Set a profile and assume its role with a manual MFA token (bypasses 1Password)
 aws-auth <token> -p <profile>
 
 # Unset the current profile
 aws-auth --clear
 ```
+
+`--profile` / `-p` accepts either a profile name or the 12-digit AWS account ID
+shown in parentheses in the picker. A unique account match selects that profile
+directly. If multiple profiles share the account, an interactive picker shows only
+those profiles. Without a terminal, ambiguous account IDs produce an error listing
+the matching profile names; pass a profile name instead. An account ID with no
+matches also produces an error. An exact profile name takes precedence over an
+account ID match. Account ID selection supports manual MFA tokens and 1Password
+in the same way as profile name selection.

@@ -6,6 +6,15 @@ export type ProfileInfo = {
   accountId?: string
 }
 
+export function findProfiles(
+  profiles: ProfileInfo[],
+  nameOrAccountId: string,
+): ProfileInfo[] {
+  const exact = profiles.find((profile) => profile.name === nameOrAccountId)
+  if (exact) return [exact]
+  return profiles.filter((profile) => profile.accountId === nameOrAccountId)
+}
+
 export async function getProfiles(): Promise<ProfileInfo[]> {
   const credFile = Bun.file(join(homedir(), '.aws', 'credentials'))
   if (!(await credFile.exists())) return []

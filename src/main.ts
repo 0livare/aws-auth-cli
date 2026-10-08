@@ -1,10 +1,11 @@
 #!/usr/bin/env bun
 import {parseCliArgs} from './cli'
 import {help, version} from './commands'
-import {getProfiles} from './credentials'
+import {findProfiles, getProfiles} from './credentials'
 import {selectProfile} from './select'
 import {assumeRoleWithMfa} from './mfa'
 import {showTokenStatus} from './token-status'
+import {printError} from './helpers'
 
 async function main() {
   const cli = parseCliArgs()
@@ -46,6 +47,32 @@ async function main() {
     if (!selected) process.exit(0)
 
     process.stderr.write('\n')
+    await handleProfile(selected)
+    process.exit(0)
+  }
+
+  if (/^\d{12}$/.test(profile)) {
+    const matches = findProfiles(await getProfiles(), profile)
+    if (matches.length === 0) {
+      printError(`  No profiles found for AWS account ${profile}`)
+      process.exit(1)
+    }
+
+    let selected: string | null
+    if (matches.length === 1) {
+      selected = matches[0].name
+    } else {
+      if (!process.stdin.isTTY) {
+        printError(
+          `  Multiple profiles found for AWS account ${profile}: ${matches.map((match) => match.name).join(', ')}. Use --profile with a profile name or run in a terminal to select one.`,
+        )
+        process.exit(1)
+      }
+      const current = process.env.AWS_PROFILE || process.env.AWS_DEFAULT_PROFILE
+      selected = await selectProfile(matches, current)
+      if (!selected) process.exit(0)
+      process.stderr.write('\n')
+    }
     await handleProfile(selected)
     process.exit(0)
   }
