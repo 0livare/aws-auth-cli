@@ -1,4 +1,4 @@
-import {afterAll, beforeAll, describe, expect, test} from 'bun:test'
+import {afterAll, beforeAll, beforeEach, describe, expect, test} from 'bun:test'
 import {mkdtemp, mkdir, rm, chmod} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
@@ -22,7 +22,10 @@ beforeAll(async () => {
       'role_arn = arn:aws:iam::542356736547:role/numeric',
     ].join('\n'),
   )
-  await Bun.write(join(home, 'bin', 'aws'), '#!/bin/sh\nexit 1\n')
+  await Bun.write(
+    join(home, 'bin', 'aws'),
+    '#!/bin/sh\necho "$@" >> "$HOME/aws-calls.log"\nexit 1\n',
+  )
   await chmod(join(home, 'bin', 'aws'), 0o755)
 })
 
@@ -31,10 +34,14 @@ afterAll(async () => {
 })
 
 async function run(...args: string[]) {
+  return runWithEnv({}, ...args)
+}
+
+async function runWithEnv(extraEnv: Record<string, string>, ...args: string[]) {
   const proc = Bun.spawn(
     [process.execPath, join(import.meta.dir, 'main.ts'), ...args],
     {
-      env: {...process.env, HOME: home, PATH: join(home, 'bin')},
+      env: {...process.env, HOME: home, PATH: join(home, 'bin'), ...extraEnv},
       stdin: 'ignore',
       stdout: 'pipe',
       stderr: 'pipe',
@@ -97,5 +104,77 @@ describe('account ID CLI selection', () => {
     expect(result.stdout).toBe(
       'export AWS_PROFILE=111111111111; unset AWS_DEFAULT_PROFILE\n',
     )
+  })
+})
+
+describe('multiple signed-in profiles', () => {
+  const awsCalls = () => join(home, 'aws-calls.log')
+  const inMinutes = (m: number) => new Date(Date.now() + m * 60_000)
+
+  beforeAll(async () => {
+    await mkdir(join(home, '.aws', 'expiry'), {recursive: true})
+    await Bun.write(
+      join(home, '.aws', 'expiry', 'sandbox'),
+      inMinutes(45).toISOString(),
+    )
+    await Bun.write(
+      join(home, '.aws', 'expiry', 'prod'),
+      inMinutes(-10).toISOString(),
+    )
+  })
+
+  beforeEach(async () => {
+    await rm(awsCalls(), {force: true})
+  })
+
+  test('switches to a profile with a valid session without calling aws', async () => {
+    const result = await run('-p', 'sandbox')
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout).toBe(
+      'export AWS_PROFILE=sandbox; unset AWS_DEFAULT_PROFILE\n',
+    )
+    expect(result.stderr).toContain('Reusing existing session')
+    expect(await Bun.file(awsCalls()).exists()).toBe(false)
+  })
+
+  test('reads legacy expiry timestamps without an offset as UTC', async () => {
+    const legacy = inMinutes(-30)
+      .toISOString()
+      .replace(/\.\d+Z$/, '')
+    await Bun.write(join(home, '.aws', 'expiry', 'break-glass'), legacy)
+    const result = await runWithEnv({TZ: 'America/Los_Angeles'}, '--list')
+    const line = result.stderr
+      .split('\n')
+      .find((l) => l.includes('break-glass'))
+    expect(line).toContain('expired')
+    await rm(join(home, '.aws', 'expiry', 'break-glass'))
+  })
+
+  test('re-authenticates an expired session', async () => {
+    const result = await run('-p', 'prod')
+    expect(result.stderr).not.toContain('Reusing existing session')
+    expect(await Bun.file(awsCalls()).text()).toContain('op_item')
+  })
+
+  test('--force re-authenticates a valid session', async () => {
+    const result = await run('-p', 'sandbox', '--force')
+    expect(result.stderr).not.toContain('Reusing existing session')
+    expect(await Bun.file(awsCalls()).text()).toContain('op_item')
+  })
+
+  test('a manual token always re-authenticates', async () => {
+    const result = await run('123456', '-p', 'sandbox')
+    expect(result.stderr).toContain('Using manual token')
+    expect(result.stderr).not.toContain('Reusing existing session')
+  })
+
+  test('--list shows each profile with its session status', async () => {
+    const result = await runWithEnv({AWS_PROFILE: 'sandbox'}, '--list')
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout).toBe('')
+    const lines = result.stderr.split('\n')
+    expect(lines.find((l) => l.includes('sandbox'))).toMatch(/❯.*4\dm left/)
+    expect(lines.find((l) => l.includes('prod '))).toContain('expired')
+    expect(lines.find((l) => l.includes('break-glass'))).toContain('signed out')
   })
 })

@@ -6,6 +6,9 @@ import {selectProfile} from './select'
 import {assumeRoleWithMfa} from './mfa'
 import {showTokenStatus} from './token-status'
 import {printError} from './helpers'
+import {baseProfileName, getSessionExpiry, isSessionUsable} from './session'
+import {listSessions} from './list'
+import chalk from './chalk'
 
 async function main() {
   const cli = parseCliArgs()
@@ -26,15 +29,30 @@ async function main() {
     process.exit(0)
   }
 
+  if (cli.values.list) {
+    await listSessions(await getProfiles())
+    process.exit(0)
+  }
+
   const token = cli.positionals[0]
   const profile = cli.values.profile
 
   async function handleProfile(raw: string) {
-    // Strip -mfa suffix so "staging-mfa" and "staging" behave identically
-    const p = raw.replace(/-mfa$/, '')
-    const result = await assumeRoleWithMfa(p, token)
-    if (result === 'error') process.exit(1)
-    if (result === 'skip') await showTokenStatus(p)
+    const p = baseProfileName(raw)
+
+    // Credentials for every profile live side by side in ~/.aws/credentials,
+    // so switching to a profile that still has a valid session needs no MFA.
+    const reuse =
+      !token && !cli.values.force && isSessionUsable(await getSessionExpiry(p))
+
+    if (reuse) {
+      process.stderr.write(chalk.dim(`  Reusing existing session\n`))
+      await showTokenStatus(p)
+    } else {
+      const result = await assumeRoleWithMfa(p, token)
+      if (result === 'error') process.exit(1)
+      if (result === 'skip') await showTokenStatus(p)
+    }
     process.stdout.write(`export AWS_PROFILE=${p}; unset AWS_DEFAULT_PROFILE\n`)
   }
 

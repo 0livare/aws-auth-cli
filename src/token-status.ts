@@ -1,12 +1,10 @@
-import {homedir} from 'os'
-import {join} from 'path'
 import chalk from './chalk'
+import {formatExpiryTime, formatRemaining, getSessionExpiry} from './session'
 
 export async function showTokenStatus(profile: string): Promise<void> {
-  const expiryFile = join(homedir(), '.aws', 'expiry', profile)
-  const file = Bun.file(expiryFile)
+  const expiresAt = await getSessionExpiry(profile)
 
-  if (!(await file.exists())) {
+  if (!expiresAt) {
     process.stderr.write(
       chalk.yellow(
         `  ⚠  [${profile}] no token — reauth: aws-auth <token> -p ${profile}\n`,
@@ -15,28 +13,16 @@ export async function showTokenStatus(profile: string): Promise<void> {
     return
   }
 
-  const expiryStr = (await file.text()).trim()
-  const expDate = new Date(expiryStr)
-  const remaining = Math.floor((expDate.getTime() - Date.now()) / 1000)
-
-  if (remaining <= 0) {
+  if (expiresAt.getTime() <= Date.now()) {
     process.stderr.write(
       chalk.yellow(
         `  ⚠  [${profile}] token expired — reauth: aws-auth <token> -p ${profile}\n`,
       ),
     )
   } else {
-    const h = Math.floor(remaining / 3600)
-    const m = Math.floor((remaining % 3600) / 60)
-    const s = remaining % 60
-    const timeStr = expDate.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    })
     process.stderr.write(
       chalk.green(
-        `  ✓  [${profile}] token expires at ${timeStr} (in ${h}h ${m}m ${s}s)\n`,
+        `  ✓  [${profile}] token expires at ${formatExpiryTime(expiresAt)} (in ${formatRemaining(expiresAt)})\n`,
       ),
     )
   }

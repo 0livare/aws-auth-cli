@@ -9,6 +9,8 @@ export function parseCliArgs() {
       options: {
         profile: {type: 'string', short: 'p'},
         clear: {type: 'boolean'},
+        force: {type: 'boolean', short: 'f'},
+        list: {type: 'boolean', short: 'l'},
         help: {type: 'boolean', short: 'h'},
         version: {type: 'boolean', short: 'v'},
       },

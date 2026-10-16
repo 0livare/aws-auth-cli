@@ -1,8 +1,7 @@
-import {homedir} from 'os'
-import {join} from 'path'
 import {createInterface} from 'readline/promises'
 import chalk from './chalk'
 import {getConfigValue} from './credentials'
+import {formatExpiryTime, formatRemaining, saveSessionExpiry} from './session'
 
 type OpAccount = {url: string; email: string; user_uuid: string}
 
@@ -218,25 +217,12 @@ export async function assumeRoleWithMfa(
   await setCredential(profile, 'aws_secret_access_key', secretKey)
   await setCredential(profile, 'aws_session_token', sessionToken)
 
-  const expiryClean = expiry.replace(/[+Z].*/, '').trim()
-  const expiryDir = join(homedir(), '.aws', 'expiry')
-  await Bun.spawn(['mkdir', '-p', expiryDir]).exited
-  await Bun.write(join(expiryDir, profile), expiryClean)
-
-  const expDate = new Date(expiry)
-  const remaining = Math.floor((expDate.getTime() - Date.now()) / 1000)
-  const h = Math.floor(remaining / 3600)
-  const m = Math.floor((remaining % 3600) / 60)
-  const s = remaining % 60
-  const timeStr = expDate.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  })
+  const expDate = new Date(expiry.trim())
+  await saveSessionExpiry(profile, expDate)
 
   process.stderr.write(
     chalk.green(
-      `  ✓  [${profile}] authenticated — expires at ${timeStr} (in ${h}h ${m}m ${s}s)\n`,
+      `  ✓  [${profile}] authenticated — expires at ${formatExpiryTime(expDate)} (in ${formatRemaining(expDate)})\n`,
     ),
   )
   return 'ok'

@@ -1,7 +1,11 @@
 import chalk from './chalk'
 import type {ProfileInfo} from './credentials'
+import {baseProfileName, getSessionExpiries, sessionLabel} from './session'
 
 const tty = process.stderr
+
+const plainLabel = ({name, accountId}: ProfileInfo) =>
+  accountId ? `${name}  (${accountId})` : name
 
 const HEADER_LINES = 3 // current profile line + blank line + "Select a profile" line
 const FOOTER_LINES = 2 // blank line + hint line
@@ -15,8 +19,14 @@ export async function selectProfile(
     return null
   }
 
-  let cursor = profiles.findIndex((p) => p.name === current)
-  if (cursor < 0) cursor = 0
+  const sessions = await getSessionExpiries(profiles)
+  const labelWidth = Math.max(...profiles.map(plainLabel).map((l) => l.length))
+
+  // AWS_PROFILE holds the base name ("staging") while the picker may list "staging-mfa"
+  const currentIndex = profiles.findIndex(
+    (p) => current && baseProfileName(p.name) === baseProfileName(current),
+  )
+  let cursor = Math.max(currentIndex, 0)
 
   const totalLines = HEADER_LINES + profiles.length + FOOTER_LINES
 
@@ -31,18 +41,20 @@ export async function selectProfile(
     tty.write(chalk.bold('  Select a profile\n'))
 
     for (let i = 0; i < profiles.length; i++) {
-      const {name, accountId} = profiles[i]
-      const isCurrent = name === current
+      const profile = profiles[i]
+      const isCurrent = i === currentIndex
       const isSelected = i === cursor
 
-      const account = accountId ? chalk.dim(`  (${accountId})`) : ''
+      const label = plainLabel(profile).padEnd(labelWidth)
+      const session = sessionLabel(sessions.get(profile.name) ?? null)
       const active = isCurrent ? chalk.dim('  (active)') : ''
-      const label = name + account + active
 
       if (isSelected) {
-        tty.write(chalk.cyan(`  ❯  ${chalk.bold(label)}\n`))
+        tty.write(
+          `${chalk.cyan(`  ❯  ${chalk.bold(label)}`)}  ${session}${active}\n`,
+        )
       } else {
-        tty.write(`     ${chalk.dim(label)}\n`)
+        tty.write(`     ${chalk.dim(label)}  ${session}${active}\n`)
       }
     }
 

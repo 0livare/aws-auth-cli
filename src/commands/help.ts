@@ -30,6 +30,12 @@ export function help() {
     `  ${chalk.bold.green('aws-auth')} ${chalk.cyan('<token>')} ${chalk.cyan('-p')} ${chalk.cyan('<profile>')}         Set profile and assume role via MFA`,
   )
   say(
+    `  ${chalk.bold.green('aws-auth')} ${chalk.cyan('-p')} ${chalk.cyan('<profile>')} ${chalk.cyan('-f')}              Re-authenticate even if a session is still valid`,
+  )
+  say(
+    `  ${chalk.bold.green('aws-auth')} ${chalk.cyan('--list')}                        Show every profile's session status`,
+  )
+  say(
     `  ${chalk.bold.green('aws-auth')} ${chalk.cyan('--clear')}                       Unset the current profile`,
   )
 
@@ -37,6 +43,12 @@ export function help() {
   say(chalk.bold('Flags:'))
   say(
     `  ${chalk.cyan('-p')}, ${chalk.cyan('--profile')} ${chalk.cyan('<profile>')}           AWS profile name or 12-digit account ID`,
+  )
+  say(
+    `  ${chalk.cyan('-f')}, ${chalk.cyan('--force')}                         Re-authenticate instead of reusing a valid session`,
+  )
+  say(
+    `  ${chalk.cyan('-l')}, ${chalk.cyan('--list')}                          List profiles and their session status`,
   )
   say(
     `  ${chalk.cyan('--clear')}                           Unset AWS_PROFILE and AWS_DEFAULT_PROFILE`,

@@ -72,9 +72,26 @@ aws-auth -p 342327770208
 # Set a profile and assume its role with a manual MFA token (bypasses 1Password)
 aws-auth <token> -p <profile>
 
+# Re-authenticate even if the profile still has a valid session
+aws-auth -p <profile> --force
+
+# Show every profile and its session status
+aws-auth --list
+
 # Unset the current profile
 aws-auth --clear
 ```
+
+### Multiple signed-in profiles
+
+Each profile's credentials are stored in its own section of `~/.aws/credentials`,
+so any number of profiles can be signed in at once. Switching to a profile whose
+session has more than 5 minutes left just sets `AWS_PROFILE` — no MFA, no
+`assume-role`. Expired (or nearly expired) sessions are re-authenticated
+automatically. Passing a manual MFA token or `--force` always re-authenticates.
+
+The interactive picker and `--list` show each profile's session status
+(`● 42m left`, `○ expired`, `○ signed out`).
 
 `--profile` / `-p` accepts either a profile name or the 12-digit AWS account ID
 shown in parentheses in the picker. A unique account match selects that profile
