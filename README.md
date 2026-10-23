@@ -31,7 +31,7 @@ aws-auth() { eval "$(command aws-auth "$@")"; }
 
 ## 1Password setup
 
-`aws-auth` can automatically fetch your MFA TOTP code from 1Password so you never have to type it manually.
+`aws-auth` can automatically fetch your MFA TOTP code from 1Password so you never have to type it manually. This integration is optional but highly recommended! 
 
 **Requirements:**
 
