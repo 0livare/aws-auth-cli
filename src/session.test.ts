@@ -26,7 +26,9 @@ describe('formatRemaining', () => {
   })
 })
 
-test('baseProfileName strips only a trailing -mfa', () => {
+test('baseProfileName strips only a trailing -mfa or -session', () => {
   expect(baseProfileName('staging-mfa')).toBe('staging')
+  expect(baseProfileName('staging-session')).toBe('staging')
   expect(baseProfileName('mfa-tools')).toBe('mfa-tools')
+  expect(baseProfileName('session-tools')).toBe('session-tools')
 })

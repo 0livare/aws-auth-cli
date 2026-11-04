@@ -9,9 +9,20 @@ const MIN_REMAINING_MS = 5 * 60 * 1000
 
 const expiryDir = () => join(homedir(), '.aws', 'expiry')
 
-/** Strip the -mfa suffix so "staging-mfa" and "staging" refer to the same session */
+/**
+ * Suffix for the section that holds session credentials when a profile's role
+ * config lives in the unsuffixed section.
+ * The two can't share a section: the AWS CLI would see role_arn and try to
+ * assume the role itself, ignoring the cached session.
+ */
+export const SESSION_SUFFIX = '-session'
+
+/**
+ * Strip the -mfa / -session suffix so "staging-mfa", "staging-session" and
+ * "staging" all refer to the same session
+ */
 export function baseProfileName(profile: string): string {
-  return profile.replace(/-mfa$/, '')
+  return profile.replace(new RegExp(`(-mfa|${SESSION_SUFFIX})$`), '')
 }
 
 export async function getSessionExpiry(profile: string): Promise<Date | null> {

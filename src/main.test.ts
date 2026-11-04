@@ -20,6 +20,13 @@ beforeAll(async () => {
       'role_arn = arn:aws:iam::542356736547:role/admin',
       '[111111111111]',
       'role_arn = arn:aws:iam::542356736547:role/numeric',
+      // Role config in the unsuffixed section, no -mfa partner
+      '[staging-role]',
+      'role_arn = arn:aws:iam::777777777777:role/dev',
+      'source_profile = base',
+      'mfa_serial = arn:aws:iam::210987654321:mfa/me',
+      '[staging-role-session]',
+      'aws_access_key_id = ASIAEXAMPLE',
     ].join('\n'),
   )
   await Bun.write(
@@ -176,5 +183,128 @@ describe('multiple signed-in profiles', () => {
     expect(lines.find((l) => l.includes('sandbox'))).toMatch(/❯.*4\dm left/)
     expect(lines.find((l) => l.includes('prod '))).toContain('expired')
     expect(lines.find((l) => l.includes('break-glass'))).toContain('signed out')
+  })
+})
+
+describe('profiles without a -mfa section', () => {
+  const awsCalls = () => join(home, 'aws-calls.log')
+  const expiryFile = () => join(home, '.aws', 'expiry', 'staging-role')
+  const fakeBin = () => join(home, 'bin-sts')
+
+  // A fake aws that reads values from the fixture-like table below and
+  // succeeds at assume-role, so the full authentication path runs.
+  beforeAll(async () => {
+    await mkdir(fakeBin(), {recursive: true})
+    await Bun.write(
+      join(fakeBin(), 'aws'),
+      [
+        '#!/bin/sh',
+        'echo "$@" >> "$HOME/aws-calls.log"',
+        'if [ -n "$FAKE_AWS_PARSE_ERROR" ]; then',
+        '  echo "aws: [ERROR]: Unable to parse config file: ~/.aws/credentials" >&2',
+        '  exit 255',
+        'fi',
+        'case "$1 $2" in',
+        '  "configure get")',
+        '    case "$3 $5" in',
+        '      "role_arn staging-role") echo arn:aws:iam::777777777777:role/dev ;;',
+        '      "mfa_serial staging-role") echo arn:aws:iam::210987654321:mfa/me ;;',
+        '      "source_profile staging-role") echo base ;;',
+        '      "region staging-role") echo us-east-1 ;;',
+        '      "output staging-role-session") echo yaml ;;',
+        '      "output staging-role") echo json ;;',
+        '      *) exit 1 ;;',
+        '    esac ;;',
+        '  "configure set") ;;',
+        '  "sts assume-role")',
+        `    printf 'ASIANEW\\tSECRET\\tTOKEN\\t2099-01-01T00:00:00+00:00\\n' ;;`,
+        '  *) exit 1 ;;',
+        'esac',
+      ].join('\n'),
+    )
+    await chmod(join(fakeBin(), 'aws'), 0o755)
+  })
+
+  beforeEach(async () => {
+    await rm(awsCalls(), {force: true})
+    await rm(expiryFile(), {force: true})
+  })
+
+  afterAll(async () => {
+    await rm(expiryFile(), {force: true})
+  })
+
+  const runSts = (extraEnv: Record<string, string>, ...args: string[]) =>
+    runWithEnv({PATH: fakeBin(), ...extraEnv}, ...args)
+
+  test('reads role config from [name] and writes credentials to [name-session]', async () => {
+    const result = await runSts({}, '123456', '-p', 'staging-role')
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout).toBe(
+      'export AWS_PROFILE=staging-role-session; unset AWS_DEFAULT_PROFILE\n',
+    )
+    const calls = await Bun.file(awsCalls()).text()
+    expect(calls).toContain('configure get role_arn --profile staging-role\n')
+    expect(calls).not.toContain('staging-role-mfa')
+    expect(calls).toContain(
+      'configure set aws_access_key_id ASIANEW --profile staging-role-session',
+    )
+    expect(await Bun.file(expiryFile()).exists()).toBe(true)
+  })
+
+  test('copies region to the -session section without overriding its own settings', async () => {
+    await runSts({}, '123456', '-p', 'staging-role')
+    const calls = await Bun.file(awsCalls()).text()
+    expect(calls).toContain(
+      'configure set region us-east-1 --profile staging-role-session',
+    )
+    expect(calls).not.toContain('configure set output')
+  })
+
+  test('accepts the -session name and reuses a valid session', async () => {
+    await Bun.write(
+      expiryFile(),
+      new Date(Date.now() + 45 * 60_000).toISOString(),
+    )
+    const result = await runSts({}, '-p', 'staging-role-session')
+    expect(result.stdout).toBe(
+      'export AWS_PROFILE=staging-role-session; unset AWS_DEFAULT_PROFILE\n',
+    )
+    expect(result.stderr).toContain('Reusing existing session')
+  })
+
+  test('selects these profiles by account ID', async () => {
+    const result = await runSts({}, '123456', '-p', '777777777777')
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout).toContain('AWS_PROFILE=staging-role-session')
+  })
+
+  test('--list shows the role profile, not the generated -session section', async () => {
+    const result = await runWithEnv(
+      {AWS_PROFILE: 'staging-role-session'},
+      '--list',
+    )
+    const lines = result.stderr.split('\n')
+    expect(lines.find((l) => l.includes('staging-role'))).toMatch(/❯ staging-role /)
+    expect(result.stderr).not.toContain('staging-role-session')
+  })
+
+  test('without op_item or a session, exports the role profile itself', async () => {
+    const result = await runSts({}, '-p', 'staging-role')
+    expect(result.stderr).toContain(
+      'No op_item found in [staging-role] or [default]',
+    )
+    expect(result.stderr).not.toContain('no token')
+    expect(result.stdout).toBe(
+      'export AWS_PROFILE=staging-role; unset AWS_DEFAULT_PROFILE\n',
+    )
+  })
+
+  test('surfaces AWS CLI config errors instead of treating values as unset', async () => {
+    const result = await runSts({FAKE_AWS_PARSE_ERROR: '1'}, '-p', 'staging-role')
+    expect(result.exitCode).toBe(1)
+    expect(result.stdout).toBe('')
+    expect(result.stderr).toContain('Unable to parse config file')
+    expect(result.stderr).not.toContain('skipping MFA')
   })
 })

@@ -1,7 +1,12 @@
 #!/usr/bin/env bun
 import {parseCliArgs} from './cli'
 import {help, version} from './commands'
-import {findProfiles, getProfiles} from './credentials'
+import {
+  AwsConfigError,
+  findProfiles,
+  getProfiles,
+  resolveProfile,
+} from './credentials'
 import {selectProfile} from './select'
 import {assumeRoleWithMfa} from './mfa'
 import {showTokenStatus} from './token-status'
@@ -45,15 +50,28 @@ async function main() {
     const reuse =
       !token && !cli.values.force && isSessionUsable(await getSessionExpiry(p))
 
+    const resolved = await resolveProfile(p)
+    let exportName = resolved.credsSection
+
     if (reuse) {
       process.stderr.write(chalk.dim(`  Reusing existing session\n`))
       await showTokenStatus(p)
     } else {
-      const result = await assumeRoleWithMfa(p, token)
+      const result = await assumeRoleWithMfa(resolved, token)
       if (result === 'error') process.exit(1)
-      if (result === 'skip') await showTokenStatus(p)
+      if (result === 'skip') {
+        if (await getSessionExpiry(p)) {
+          await showTokenStatus(p)
+        } else {
+          // No session was ever written to the credentials section, so point
+          // at the role profile itself and let the AWS CLI prompt for MFA.
+          exportName = resolved.name
+        }
+      }
     }
-    process.stdout.write(`export AWS_PROFILE=${p}; unset AWS_DEFAULT_PROFILE\n`)
+    process.stdout.write(
+      `export AWS_PROFILE=${exportName}; unset AWS_DEFAULT_PROFILE\n`,
+    )
   }
 
   if (!profile) {
@@ -99,4 +117,10 @@ async function main() {
   await handleProfile(profile)
 }
 
-await main()
+try {
+  await main()
+} catch (err) {
+  if (!(err instanceof AwsConfigError)) throw err
+  printError(`  ✖  ${err.message}`)
+  process.exit(1)
+}

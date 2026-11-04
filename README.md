@@ -54,6 +54,25 @@ op_item = AWS Staging MFA   # overrides [default] for this profile only
 
 With this configured, `aws-auth -p <profile>` will automatically assume the role — no token argument needed. If 1Password cannot provide the token, the CLI prompts you to enter the six-digit MFA code manually.
 
+## Profile layouts
+
+`aws-auth` keeps a profile's role config and its temporary session credentials
+in separate sections. (They can't share one: the AWS CLI would see `role_arn`
+and try to assume the role itself, ignoring the cached session.) Two layouts are
+supported:
+
+| Your file has                             | Role config read from | Session credentials / `AWS_PROFILE` |
+| ----------------------------------------- | --------------------- | ----------------------------------- |
+| `[name-mfa]` with `role_arn`              | `[name-mfa]`          | `[name]`                            |
+| only `[name]` with `role_arn` | `[name]`              | `[name-session]`                    |
+
+Standard role profiles work as-is. Select them
+by their own name (`aws-auth -p my-role`); `-p my-role-session` works
+too.
+
+In both layouts, `region` and `output` from the role config are copied to the
+profile `AWS_PROFILE` points at, unless that profile already sets them.
+
 ## Usage
 
 ```sh
