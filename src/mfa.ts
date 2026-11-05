@@ -1,7 +1,13 @@
 import {createInterface} from 'readline/promises'
 import chalk from './chalk'
 import {getConfigValue, type ResolvedProfile} from './credentials'
-import {formatExpiryTime, formatRemaining, saveSessionExpiry} from './session'
+import {writeSessionCredentials} from './credentials-file'
+import {
+  formatExpiryTime,
+  formatRemaining,
+  saveSessionExpiry,
+  SESSION_SUFFIX,
+} from './session'
 
 type OpAccount = {url: string; email: string; user_uuid: string}
 
@@ -214,9 +220,19 @@ export async function assumeRoleWithMfa(
     return 'error'
   }
 
-  await setCredential(credsSection, 'aws_access_key_id', accessKey)
-  await setCredential(credsSection, 'aws_secret_access_key', secretKey)
-  await setCredential(credsSection, 'aws_session_token', sessionToken)
+  const credentials = {
+    aws_access_key_id: accessKey,
+    aws_secret_access_key: secretKey,
+    aws_session_token: sessionToken,
+  }
+  if (credsSection.endsWith(SESSION_SUFFIX)) {
+    // Generated sections are kept grouped at the bottom of the file
+    await writeSessionCredentials(credsSection, credentials)
+  } else {
+    for (const [key, value] of Object.entries(credentials)) {
+      await setCredential(credsSection, key, value)
+    }
+  }
   await copySettings(configSection, credsSection)
 
   const expDate = new Date(expiry.trim())

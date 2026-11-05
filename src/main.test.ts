@@ -1,4 +1,12 @@
-import {afterAll, beforeAll, beforeEach, describe, expect, test} from 'bun:test'
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from 'bun:test'
 import {mkdtemp, mkdir, rm, chmod} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
@@ -225,9 +233,17 @@ describe('profiles without a -mfa section', () => {
     await chmod(join(fakeBin(), 'aws'), 0o755)
   })
 
+  const credentialsFile = () => join(home, '.aws', 'credentials')
+  let originalCredentials = ''
+
   beforeEach(async () => {
     await rm(awsCalls(), {force: true})
     await rm(expiryFile(), {force: true})
+    originalCredentials = await Bun.file(credentialsFile()).text()
+  })
+
+  afterEach(async () => {
+    await Bun.write(credentialsFile(), originalCredentials)
   })
 
   afterAll(async () => {
@@ -246,8 +262,17 @@ describe('profiles without a -mfa section', () => {
     const calls = await Bun.file(awsCalls()).text()
     expect(calls).toContain('configure get role_arn --profile staging-role\n')
     expect(calls).not.toContain('staging-role-mfa')
-    expect(calls).toContain(
-      'configure set aws_access_key_id ASIANEW --profile staging-role-session',
+    expect(calls).not.toContain('configure set aws_access_key_id')
+
+    const written = await Bun.file(credentialsFile()).text()
+    const [userPart] = originalCredentials.split('[staging-role-session]')
+    expect(written).toBe(
+      userPart.trimEnd() +
+        '\n\n\n\n' +
+        '[staging-role-session]\n' +
+        'aws_access_key_id = ASIANEW\n' +
+        'aws_secret_access_key = SECRET\n' +
+        'aws_session_token = TOKEN\n',
     )
     expect(await Bun.file(expiryFile()).exists()).toBe(true)
   })

@@ -73,6 +73,10 @@ too.
 In both layouts, `region` and `output` from the role config are copied to the
 profile `AWS_PROFILE` points at, unless that profile already sets them.
 
+Generated `[name-session]` sections are kept together at the bottom of
+`~/.aws/credentials`, below a few empty lines, so they stay out of the way of
+the sections you maintain. Everything above them is left as-is.
+
 ## Usage
 
 ```sh

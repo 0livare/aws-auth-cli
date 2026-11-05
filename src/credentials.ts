@@ -23,8 +23,12 @@ export class AwsConfigError extends Error {}
 
 type Sections = Map<string, Map<string, string>>
 
-const credentialsPath = () => join(homedir(), '.aws', 'credentials')
-const configPath = () => join(homedir(), '.aws', 'config')
+// Same locations the AWS CLI uses, so we read and write the files it reads
+export const credentialsPath = () =>
+  process.env.AWS_SHARED_CREDENTIALS_FILE ||
+  join(homedir(), '.aws', 'credentials')
+const configPath = () =>
+  process.env.AWS_CONFIG_FILE || join(homedir(), '.aws', 'config')
 
 export function findProfiles(
   profiles: ProfileInfo[],
