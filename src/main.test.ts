@@ -314,7 +314,11 @@ describe('signing in', () => {
   })
 
   test('fetches the MFA code using one_password_item', async () => {
-    const result = await runSts({FAKE_OP_ITEM: 'Work MFA'}, '-p', 'staging-role')
+    const result = await runSts(
+      {FAKE_OP_ITEM: 'Work MFA'},
+      '-p',
+      'staging-role',
+    )
     expect(result.exitCode).toBe(0)
     expect(result.stderr).toContain('item: Work MFA, config: [staging-role]')
     const calls = await Bun.file(awsCalls()).text()
@@ -354,7 +358,9 @@ describe('signing in', () => {
       '--list',
     )
     const lines = result.stderr.split('\n')
-    expect(lines.find((l) => l.includes('staging-role'))).toMatch(/❯ staging-role /)
+    expect(lines.find((l) => l.includes('staging-role'))).toMatch(
+      /❯ staging-role /,
+    )
     expect(result.stderr).not.toContain('staging-role-session')
   })
 
@@ -368,10 +374,69 @@ describe('signing in', () => {
   })
 
   test('surfaces AWS CLI config errors instead of treating values as unset', async () => {
-    const result = await runSts({FAKE_AWS_PARSE_ERROR: '1'}, '-p', 'staging-role')
+    const result = await runSts(
+      {FAKE_AWS_PARSE_ERROR: '1'},
+      '-p',
+      'staging-role',
+    )
     expect(result.exitCode).toBe(1)
     expect(result.stdout).toBe('')
     expect(result.stderr).toContain('Unable to parse config file')
     expect(result.stderr).not.toContain('skipping MFA')
+  })
+})
+
+describe('invalid ~/.aws files', () => {
+  let badHome: string
+
+  beforeAll(async () => {
+    badHome = await mkdtemp(join(tmpdir(), 'aws-auth-bad-'))
+    await mkdir(join(badHome, '.aws', 'expiry'), {recursive: true})
+    await Bun.write(
+      join(badHome, '.aws', 'credentials'),
+      [
+        '[staging]',
+        'role_arn = arn:aws:iam::123456789012:role/dev',
+        '[staging]',
+        'aws_access_key_id = ASIAOLD',
+      ].join('\n'),
+    )
+    // A valid session, so -p would normally switch without calling aws
+    await Bun.write(
+      join(badHome, '.aws', 'expiry', 'staging'),
+      new Date(Date.now() + 45 * 60_000).toISOString(),
+    )
+  })
+
+  afterAll(async () => {
+    await rm(badHome, {recursive: true, force: true})
+  })
+
+  const runBad = (...args: string[]) => runWithEnv({HOME: badHome}, ...args)
+
+  test('--list stops with a clear message', async () => {
+    const result = await runBad('--list')
+    expect(result.exitCode).toBe(1)
+    expect(result.stdout).toBe('')
+    expect(result.stderr).toContain(
+      "~/.aws/credentials is invalid, so the AWS CLI can't read it",
+    )
+    expect(result.stderr).toContain(
+      'line 3: [staging] appears more than once (first on line 1)',
+    )
+    expect(result.stderr).toContain('Fix the file, then run aws-auth again.')
+  })
+
+  test('does not switch to a profile, even one with a valid session', async () => {
+    const result = await runBad('-p', 'staging')
+    expect(result.exitCode).toBe(1)
+    expect(result.stdout).toBe('')
+    expect(result.stderr).not.toContain('Reusing existing session')
+  })
+
+  test('--clear still works, since it does not read the files', async () => {
+    const result = await runBad('--clear')
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout).toContain('unset AWS_PROFILE')
   })
 })

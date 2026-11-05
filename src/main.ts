@@ -13,6 +13,7 @@ import {
   sessionProfileName,
 } from './session'
 import {listSessions} from './list'
+import {checkAwsFiles} from './config-validation'
 import chalk from './chalk'
 
 async function main() {
@@ -33,6 +34,10 @@ async function main() {
     process.stdout.write('unset AWS_PROFILE; unset AWS_DEFAULT_PROFILE\n')
     process.exit(0)
   }
+
+  // Everything below reads ~/.aws; a file the AWS CLI can't parse would
+  // otherwise fail later with a vague error, or not at all (--list, reuse)
+  if (!(await checkAwsFiles())) process.exit(1)
 
   if (cli.values.list) {
     await listSessions(await getProfiles())
@@ -120,6 +125,8 @@ try {
   await main()
 } catch (err) {
   if (!(err instanceof AwsConfigError)) throw err
-  printError(`  ✖  ${err.message}`)
+  printError(
+    `  ✖  The AWS CLI couldn't read your configuration:\n     ${err.message}`,
+  )
   process.exit(1)
 }

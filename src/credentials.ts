@@ -15,7 +15,7 @@ type Sections = Map<string, Map<string, string>>
 export const credentialsPath = () =>
   process.env.AWS_SHARED_CREDENTIALS_FILE ||
   join(homedir(), '.aws', 'credentials')
-const configPath = () =>
+export const configPath = () =>
   process.env.AWS_CONFIG_FILE || join(homedir(), '.aws', 'config')
 
 export function findProfiles(
@@ -126,7 +126,7 @@ async function parseSections(
       section.set(lastKey, `${section.get(lastKey)}\n${line.trimEnd()}`)
       continue
     }
-    const kv = line.match(/^\s*([^=#;\s]+)\s*=\s*(.*)$/)
+    const kv = line.match(/^\s*([^=:#;\s]+)\s*[=:]\s*(.*)$/)
     if (kv) {
       section.set(kv[1], kv[2].trim())
       lastKey = kv[1]

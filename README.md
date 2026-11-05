@@ -187,6 +187,21 @@ in the same way as profile name selection.
 
 ## Troubleshooting
 
-If the AWS CLI can't read your config — for example, `~/.aws/credentials` has
-the same section twice — `aws-auth` stops and shows the AWS CLI's error
-(`Unable to parse config file: …`). Fix the file and try again.
+Before doing anything else, `aws-auth` checks `~/.aws/credentials` and
+`~/.aws/config` for mistakes that stop the AWS CLI from reading them, and lists
+each one with its line number:
+
+- the same `[section]` twice in one file
+- the same key twice in one section
+- a `key = value` line before any `[section]`
+- a line that isn't a section, a `key = value` pair or a comment
+
+```
+  ✖  ~/.aws/credentials is invalid, so the AWS CLI can't read it:
+       line 8: [staging] appears more than once (first on line 5)
+     Fix the file, then run aws-auth again.
+```
+
+It also warns about a comment after a value (`duration_seconds = 14400  # 4h`),
+which the AWS CLI reads as part of the value. If the AWS CLI still reports a
+problem `aws-auth` didn't catch, `aws-auth` shows the AWS CLI's own error.
