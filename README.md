@@ -1,6 +1,6 @@
 # AWS Auth Helper CLI
 
-A CLI to make authenticating with AWS in the command line easier. It reads the role profiles in `~/.aws/credentials`, lets you pick one from an interactive list, assumes the role with MFA (fetching the TOTP code from 1Password), and points `AWS_PROFILE` at the resulting session.
+`aws-auth` makes authenticating with AWS in the command line easier. It reads the role profiles in `~/.aws/credentials`, lets you pick one from an interactive list, assumes the role with MFA (fetching the TOTP code from 1Password), and points `AWS_PROFILE` at the resulting session.
 
 ## Installation
 
@@ -10,7 +10,7 @@ A CLI to make authenticating with AWS in the command line easier. It reads the r
 > 1. Claude Code must be must be [installed and configured](https://code.claude.com/docs/en/quickstart#step-1:-install-claude-code)
 
 ```bash
-# Create a global `ralph` cli command
+# Create a global `aws-auth` command
 npm i -g aws-auth-cli
 ``` -->
 
@@ -21,10 +21,10 @@ bun install
 bun link     # makes `aws-auth` available globally
 ```
 
-In order to allow this tool to modify your shell environment (a subprocess can't modify its parent shell's environment) add this wrapper to your `~/.zshrc`:
+In order to allow `aws-auth` to modify your shell environment (a subprocess can't modify its parent shell's environment) add this wrapper to your `~/.zshrc`:
 
 ```zsh
-# Wrapper to allow the aws-auth-cli tool to modify the current shell environment
+# Wrapper to allow aws-auth to modify the current shell environment
 # See: https://github.com/0livare/aws-auth-cli
 aws-auth() { eval "$(command aws-auth "$@")"; }
 ```
@@ -98,17 +98,17 @@ aws_session_token = ...
 region = us-east-1
 ```
 
-You can refer to a profile by either name: `-p staging`
-and `-p staging-session` do the same thing.
+You can refer to a profile by either name: `aws-auth -p staging` and
+`aws-auth -p staging-session` do the same thing.
 
 ## 1Password setup
 
-`aws-auth` can automatically fetch your MFA TOTP code from 1Password so you never have to type it manually. This integration is optional but highly recommended! 
+`aws-auth` can automatically fetch your MFA TOTP code from 1Password so you never have to type it manually. This integration is optional but highly recommended!
 
 **Requirements:**
 
 1. [1Password CLI](https://developer.1password.com/docs/cli) installed
-2. Signed in to the CLI: `op signin` (required — `op item get` won't work without it)
+2. Signed in to the 1Password CLI: `op signin` (required — `op item get` won't work without it)
 
 Set `one_password_item` to the name of the 1Password item that holds your AWS
 MFA code. Setting it under `[default]` in `~/.aws/config` applies it to every
@@ -169,14 +169,14 @@ Each profile's session lives in its own `-session` profile, so any number of
 profiles can be signed in at once. Switching to a profile whose session has more
 than 5 minutes left just sets `AWS_PROFILE` — no MFA, no `assume-role`. Expired
 (or nearly expired) sessions are re-authenticated automatically. Passing a manual
-MFA token or `--force` always re-authenticates.
+MFA token or `aws-auth -p <profile> --force` always re-authenticates.
 
-The interactive picker and `--list` show each profile's session status
+The interactive picker and `aws-auth --list` show each profile's session status
 (`● 42m left`, `○ expired`, `○ signed out`).
 
 ### Selecting by account ID
 
-`--profile` / `-p` accepts either a profile name or the 12-digit AWS account ID
+`aws-auth -p` (or `--profile`) accepts either a profile name or the 12-digit AWS account ID
 shown in parentheses in the picker. A unique account match selects that profile
 directly. If multiple profiles share the account, an interactive picker shows only
 those profiles. Without a terminal, ambiguous account IDs produce an error listing
@@ -188,5 +188,5 @@ in the same way as profile name selection.
 ## Troubleshooting
 
 If the AWS CLI can't read your config — for example, `~/.aws/credentials` has
-the same section twice — `aws-auth` stops and shows the CLI's error
+the same section twice — `aws-auth` stops and shows the AWS CLI's error
 (`Unable to parse config file: …`). Fix the file and try again.
