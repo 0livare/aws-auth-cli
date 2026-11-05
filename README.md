@@ -58,13 +58,13 @@ value, so `duration_seconds = 14400  # optional` would be read as
 Every section in `~/.aws/credentials` with a `role_arn` shows up in the picker.
 Each role profile needs:
 
-| Key                 | Purpose                                                    |
-| ------------------- | ---------------------------------------------------------- |
-| `role_arn`          | Role to assume                                             |
-| `source_profile`    | Profile with the long-term keys used to call `assume-role` |
-| `mfa_serial`        | Your MFA device                                            |
-| `duration_seconds`  | Session length (optional, default `3600`)                  |
-| `one_password_item` | 1Password item holding the MFA code (optional, see below)  |
+| Key                 | Purpose                                                                                                   |
+| ------------------- | --------------------------------------------------------------------------------------------------------- |
+| `role_arn`          | Role to assume                                                                                            |
+| `source_profile`    | Profile with the long-term keys used to call `assume-role`                                                |
+| `mfa_serial`        | Your MFA device                                                                                           |
+| `duration_seconds`  | Session length (optional, default `3600`)                                                                 |
+| `one_password_item` | 1Password item holding the MFA code (optional, inherited from `source_profile` or `[default]`, see below) |
 
 ### Session profiles
 
@@ -114,8 +114,11 @@ You can refer to a profile by either name: `aws-auth -p staging` and
 2. Signed in to the 1Password CLI: `op signin` (required — `op item get` won't work without it)
 
 Set `one_password_item` to the name of the 1Password item that holds your AWS
-MFA code. Setting it under `[default]` in `~/.aws/config` applies it to every
-profile; setting it on a role profile overrides the default for that profile:
+MFA code. It's looked up on the role profile first, then on its
+`source_profile` (the IAM user that owns the MFA device), then under
+`[default]`. Set it under `[default]` in `~/.aws/config` to apply it to every
+profile, on a source profile to cover every role that uses it, or on a role
+profile to override both for that profile:
 
 ```ini
 # ~/.aws/config

@@ -287,6 +287,7 @@ describe('signing in', () => {
         '      "mfa_serial staging-role") echo arn:aws:iam::210987654321:mfa/me ;;',
         '      "source_profile staging-role") echo base ;;',
         '      "one_password_item staging-role") [ -n "$FAKE_OP_ITEM" ] && echo "$FAKE_OP_ITEM" || exit 1 ;;',
+        '      "one_password_item base") [ -n "$FAKE_SOURCE_OP_ITEM" ] && echo "$FAKE_SOURCE_OP_ITEM" || exit 1 ;;',
         '      "op_item default") [ -n "$FAKE_DEFAULT_OP_ITEM" ] && echo "$FAKE_DEFAULT_OP_ITEM" || exit 1 ;;',
         '      *) exit 1 ;;',
         '    esac ;;',
@@ -399,6 +400,25 @@ describe('signing in', () => {
     expect(result.stderr).toContain('item: Shared MFA, config: [default]')
   })
 
+  test('inherits one_password_item from source_profile before [default]', async () => {
+    const result = await runSts(
+      {FAKE_SOURCE_OP_ITEM: 'User MFA', FAKE_DEFAULT_OP_ITEM: 'Shared MFA'},
+      '-p',
+      'staging-role',
+    )
+    expect(result.exitCode).toBe(0)
+    expect(result.stderr).toContain('item: User MFA, config: [base]')
+  })
+
+  test("the role profile's own one_password_item beats source_profile's", async () => {
+    const result = await runSts(
+      {FAKE_OP_ITEM: 'Work MFA', FAKE_SOURCE_OP_ITEM: 'User MFA'},
+      '-p',
+      'staging-role',
+    )
+    expect(result.stderr).toContain('item: Work MFA, config: [staging-role]')
+  })
+
   test('accepts the -session name and reuses a valid session', async () => {
     await Bun.write(
       expiryFile(),
@@ -430,7 +450,7 @@ describe('signing in', () => {
   test('without a 1Password item or a session, exports the role profile itself', async () => {
     const result = await runSts({}, '-p', 'staging-role')
     expect(result.stderr).toContain(
-      'No one_password_item / op_item found in [staging-role] or [default]',
+      'No one_password_item / op_item found in [staging-role], [base], [default]',
     )
     expect(result.stderr).not.toContain('no token')
     expect(result.stdout).toBe(exported('staging-role'))

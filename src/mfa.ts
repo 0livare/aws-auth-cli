@@ -101,31 +101,49 @@ async function getOpItem(profile: string): Promise<string | null> {
   return null
 }
 
+/**
+ * The first 1Password item set on the role profile, then its source_profile
+ * (the IAM user that owns the MFA device), then [default].
+ */
+async function findOpItem(
+  profiles: string[],
+): Promise<{item: string; profile: string} | null> {
+  for (const profile of profiles) {
+    const item = await getOpItem(profile)
+    if (item) return {item, profile}
+  }
+  return null
+}
+
 export async function assumeRoleWithMfa(
   profile: string,
   token?: string,
 ): Promise<'ok' | 'skip' | 'error'> {
+  const sourceProfile = await getConfigValue(profile, 'source_profile')
+
   // Resolve token — from argument, or 1Password, or give up
   let resolvedToken = token
   if (!resolvedToken) {
-    const opItemProfile = await getOpItem(profile)
-    const opItemDefault = await getOpItem('default')
-    const opItem = opItemProfile ?? opItemDefault
+    const searched = [
+      ...new Set([profile, sourceProfile, 'default'].filter((p) => p != null)),
+    ]
+    const found = await findOpItem(searched)
 
-    if (!opItem) {
+    if (!found) {
+      const where = searched.map((p) => `[${p}]`).join(', ')
       process.stderr.write(
         chalk.yellow(
-          `  ⚠  No one_password_item / op_item found in [${profile}] or [default] — skipping MFA\n` +
+          `  ⚠  No one_password_item / op_item found in ${where} — skipping MFA\n` +
             `     Add one_password_item to ~/.aws/config, or pass a token: aws-auth <token> -p ${profile}\n`,
         ),
       )
       return 'skip'
     }
 
-    const source = opItemProfile ? `[${profile}]` : '[default]'
+    const opItem = found.item
     process.stderr.write(
       chalk.dim(
-        `  Fetching MFA token from 1Password (item: ${chalk.white(opItem)}, config: ${source})...\n`,
+        `  Fetching MFA token from 1Password (item: ${chalk.white(opItem)}, config: [${found.profile}])...\n`,
       ),
     )
 
@@ -169,7 +187,6 @@ export async function assumeRoleWithMfa(
     return 'error'
   }
 
-  const sourceProfile = await getConfigValue(profile, 'source_profile')
   if (!sourceProfile) {
     process.stderr.write(
       chalk.red(`  ✖  [${profile}] missing source_profile\n`),
