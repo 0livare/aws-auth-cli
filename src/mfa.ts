@@ -1,12 +1,12 @@
 import {createInterface} from 'readline/promises'
 import chalk from './chalk'
-import {getConfigValue, type ResolvedProfile} from './credentials'
+import {getConfigValue, getInheritedSettings} from './credentials'
 import {writeSessionCredentials} from './credentials-file'
 import {
   formatExpiryTime,
   formatRemaining,
   saveSessionExpiry,
-  SESSION_SUFFIX,
+  sessionProfileName,
 } from './session'
 
 type OpAccount = {url: string; email: string; user_uuid: string}
@@ -90,28 +90,39 @@ async function promptForToken(): Promise<string | null> {
   }
 }
 
+/** 1Password item name keys, in order of precedence */
+const OP_ITEM_KEYS = ['one_password_item', 'op_item']
+
+async function getOpItem(profile: string): Promise<string | null> {
+  for (const key of OP_ITEM_KEYS) {
+    const value = await getConfigValue(profile, key)
+    if (value) return value
+  }
+  return null
+}
+
 export async function assumeRoleWithMfa(
-  {name: profile, configSection, credsSection}: ResolvedProfile,
+  profile: string,
   token?: string,
 ): Promise<'ok' | 'skip' | 'error'> {
   // Resolve token — from argument, or 1Password, or give up
   let resolvedToken = token
   if (!resolvedToken) {
-    const opItemProfile = await getConfigValue(configSection, 'op_item')
-    const opItemDefault = await getConfigValue('default', 'op_item')
+    const opItemProfile = await getOpItem(profile)
+    const opItemDefault = await getOpItem('default')
     const opItem = opItemProfile ?? opItemDefault
 
     if (!opItem) {
       process.stderr.write(
         chalk.yellow(
-          `  ⚠  No op_item found in [${configSection}] or [default] — skipping MFA\n` +
-            `     Add op_item to ~/.aws/config, or pass a token: aws-auth <token> -p ${profile}\n`,
+          `  ⚠  No one_password_item / op_item found in [${profile}] or [default] — skipping MFA\n` +
+            `     Add one_password_item to ~/.aws/config, or pass a token: aws-auth <token> -p ${profile}\n`,
         ),
       )
       return 'skip'
     }
 
-    const source = opItemProfile ? `[${configSection}]` : '[default]'
+    const source = opItemProfile ? `[${profile}]` : '[default]'
     process.stderr.write(
       chalk.dim(
         `  Fetching MFA token from 1Password (item: ${chalk.white(opItem)}, config: ${source})...\n`,
@@ -146,32 +157,27 @@ export async function assumeRoleWithMfa(
     )
   }
 
-  const roleArn = await getConfigValue(configSection, 'role_arn')
+  const roleArn = await getConfigValue(profile, 'role_arn')
   if (!roleArn) {
-    process.stderr.write(
-      chalk.red(`  ✖  [${configSection}] missing role_arn\n`),
-    )
+    process.stderr.write(chalk.red(`  ✖  [${profile}] missing role_arn\n`))
     return 'error'
   }
 
-  const mfaSerial = await getConfigValue(configSection, 'mfa_serial')
+  const mfaSerial = await getConfigValue(profile, 'mfa_serial')
   if (!mfaSerial) {
-    process.stderr.write(
-      chalk.red(`  ✖  [${configSection}] missing mfa_serial\n`),
-    )
+    process.stderr.write(chalk.red(`  ✖  [${profile}] missing mfa_serial\n`))
     return 'error'
   }
 
-  const sourceProfile = await getConfigValue(configSection, 'source_profile')
+  const sourceProfile = await getConfigValue(profile, 'source_profile')
   if (!sourceProfile) {
     process.stderr.write(
-      chalk.red(`  ✖  [${configSection}] missing source_profile\n`),
+      chalk.red(`  ✖  [${profile}] missing source_profile\n`),
     )
     return 'error'
   }
 
-  const duration =
-    (await getConfigValue(configSection, 'duration_seconds')) ?? '3600'
+  const duration = (await getConfigValue(profile, 'duration_seconds')) ?? '3600'
   const sessionName = `${profile.replace(/[^a-zA-Z0-9_=,.@-]/g, '-')}-${Date.now()}`
 
   process.stderr.write(chalk.dim(`  Assuming role for [${profile}]...\n`))
@@ -220,20 +226,13 @@ export async function assumeRoleWithMfa(
     return 'error'
   }
 
-  const credentials = {
+  // Rewritten in full each time so it always mirrors the role profile
+  await writeSessionCredentials(sessionProfileName(profile), {
     aws_access_key_id: accessKey,
     aws_secret_access_key: secretKey,
     aws_session_token: sessionToken,
-  }
-  if (credsSection.endsWith(SESSION_SUFFIX)) {
-    // Generated sections are kept grouped at the bottom of the file
-    await writeSessionCredentials(credsSection, credentials)
-  } else {
-    for (const [key, value] of Object.entries(credentials)) {
-      await setCredential(credsSection, key, value)
-    }
-  }
-  await copySettings(configSection, credsSection)
+    ...(await getInheritedSettings(profile)),
+  })
 
   const expDate = new Date(expiry.trim())
   await saveSessionExpiry(profile, expDate)
@@ -244,26 +243,4 @@ export async function assumeRoleWithMfa(
     ),
   )
   return 'ok'
-}
-
-/** Settings that should follow AWS_PROFILE from the role section to the session section */
-const INHERITED_SETTINGS = ['region', 'output']
-
-/**
- * AWS_PROFILE points at the credentials section, so settings that only live
- * in the role's config section would otherwise
- * be lost. Values already set on the credentials section are left alone.
- */
-async function copySettings(from: string, to: string) {
-  for (const key of INHERITED_SETTINGS) {
-    const value = await getConfigValue(from, key)
-    if (value && !(await getConfigValue(to, key))) {
-      await setCredential(to, key, value)
-    }
-  }
-}
-
-async function setCredential(profile: string, key: string, value: string) {
-  await Bun.spawn(['aws', 'configure', 'set', key, value, '--profile', profile])
-    .exited
 }

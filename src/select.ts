@@ -22,7 +22,7 @@ export async function selectProfile(
   const sessions = await getSessionExpiries(profiles)
   const labelWidth = Math.max(...profiles.map(plainLabel).map((l) => l.length))
 
-  // AWS_PROFILE holds the base name ("staging") while the picker may list "staging-mfa"
+  // AWS_PROFILE holds the generated "staging-session" while the picker lists "staging"
   const currentIndex = profiles.findIndex(
     (p) => current && baseProfileName(p.name) === baseProfileName(current),
   )

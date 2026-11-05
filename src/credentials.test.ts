@@ -2,9 +2,9 @@ import {describe, expect, test} from 'bun:test'
 import {findProfiles, type ProfileInfo} from './credentials'
 
 const profiles: ProfileInfo[] = [
-  {name: 'sandbox-mfa', accountId: '342327770208'},
-  {name: 'prod-mfa', accountId: '542356736547'},
-  {name: 'break-glass-mfa', accountId: '542356736547'},
+  {name: 'sandbox', accountId: '342327770208'},
+  {name: 'prod', accountId: '542356736547'},
+  {name: 'break-glass', accountId: '542356736547'},
   {name: 'no-account'},
 ]
 

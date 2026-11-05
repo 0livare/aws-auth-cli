@@ -1,21 +1,9 @@
 import {homedir} from 'os'
 import {join} from 'path'
-import {SESSION_SUFFIX} from './session'
 
 export type ProfileInfo = {
   name: string
   accountId?: string
-}
-
-/**
- * Where a profile's pieces live in ~/.aws:
- * - configSection: role_arn, mfa_serial, source_profile, op_item (read only)
- * - credsSection: the session credentials we write, and what AWS_PROFILE points at
- */
-export type ResolvedProfile = {
-  name: string
-  configSection: string
-  credsSection: string
 }
 
 /** Thrown when the AWS CLI can't read its config at all (e.g. a malformed file) */
@@ -53,42 +41,49 @@ export async function getProfiles(): Promise<ProfileInfo[]> {
   const sections = await readSections()
   const roleArn = (name: string) => sections.get(name)?.get('role_arn')
 
-  const allNames = new Set(names)
-  const seen = new Set<string>()
-  const uniqueNames: string[] = []
-  for (const name of names) {
-    // Hide non-mfa entries that have a -mfa counterpart — they're auto-created
-    // cached credential sections and would just duplicate the -mfa config entry.
-    if (!name.endsWith('-mfa') && allNames.has(`${name}-mfa`)) continue
-    if (!seen.has(name)) {
-      seen.add(name)
-      uniqueNames.push(name)
-    }
-  }
-
   // Only role profiles are listed; generated -session sections have no role_arn
-  return uniqueNames
-    .filter((name) => roleArn(name) ?? roleArn(`${name}-mfa`))
-    .map((name) => ({
-      name,
-      accountId: extractAccountId(roleArn(name) ?? roleArn(`${name}-mfa`)),
-    }))
+  return [...new Set(names)]
+    .filter((name) => roleArn(name))
+    .map((name) => ({name, accountId: extractAccountId(roleArn(name))}))
 }
 
 /**
- * Decide which sections hold a profile's role config and its session
- * credentials. A `[name-mfa]` section keeps the original layout (config in
- * `-mfa`, credentials in `[name]`). Otherwise, if `[name]` itself has a
- * role_arn, config is read from `[name]` and
- * credentials go to `[name-session]`.
+ * Keys that make the AWS CLI resolve credentials itself (assume a role, run a
+ * process, use SSO) or that hold credentials. Copying any of these into a
+ * -session section would make the CLI ignore the cached session.
  */
-export async function resolveProfile(name: string): Promise<ResolvedProfile> {
-  const sections = await readSections()
-  const mfaSection = `${name}-mfa`
-  if (!sections.has(mfaSection) && sections.get(name)?.has('role_arn')) {
-    return {name, configSection: name, credsSection: name + SESSION_SUFFIX}
-  }
-  return {name, configSection: mfaSection, credsSection: name}
+const NON_INHERITED_KEYS = new Set([
+  'role_arn',
+  'source_profile',
+  'credential_source',
+  'mfa_serial',
+  'role_session_name',
+  'external_id',
+  'duration_seconds',
+  'web_identity_token_file',
+  'credential_process',
+  'sso_session',
+  'sso_account_id',
+  'sso_role_name',
+  'sso_start_url',
+  'sso_region',
+  'aws_access_key_id',
+  'aws_secret_access_key',
+  'aws_session_token',
+])
+
+/**
+ * Every property of a profile (from ~/.aws/credentials and ~/.aws/config,
+ * config winning) that can safely follow it into its -session section:
+ * region, output, op_item, custom keys, etc.
+ */
+export async function getInheritedSettings(
+  profile: string,
+): Promise<Record<string, string>> {
+  const section = (await readSections()).get(profile) ?? new Map()
+  return Object.fromEntries(
+    [...section].filter(([key]) => !NON_INHERITED_KEYS.has(key)),
+  )
 }
 
 /** Key/value pairs for every section in ~/.aws/credentials and ~/.aws/config */
