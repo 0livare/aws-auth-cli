@@ -43,9 +43,14 @@ aws_secret_access_key = ...
 role_arn = arn:aws:iam::123456789012:role/DevRole
 source_profile = iam-user
 mfa_serial = arn:aws:iam::210987654321:mfa/username
-duration_seconds = 14400   # optional, defaults to 3600
+# optional, defaults to 3600
+duration_seconds = 14400
 region = us-east-1
 ```
+
+Keep comments on their own lines. The AWS CLI doesn't strip comments after a
+value, so `duration_seconds = 14400  # optional` would be read as
+`14400  # optional`, and the sign-in would fail.
 
 Every section in `~/.aws/credentials` with a `role_arn` shows up in the picker.
 Each role profile needs:

@@ -37,6 +37,9 @@ beforeAll(async () => {
       'region = us-east-1',
       'output = json',
       'team = platform',
+      's3 =',
+      '  max_concurrent_requests = 20',
+      '  multipart_threshold = 64MB',
       '[staging-role-session]',
       'aws_access_key_id = ASIAEXAMPLE',
     ].join('\n'),
@@ -284,6 +287,9 @@ describe('signing in', () => {
         'region = us-east-1',
         'output = json',
         'team = platform',
+        's3 =',
+        '  max_concurrent_requests = 20',
+        '  multipart_threshold = 64MB',
         '',
       ].join('\n'),
     )
@@ -303,6 +309,8 @@ describe('signing in', () => {
       expect(session).not.toContain(key)
     }
     expect(session).toContain('team = platform')
+    // Nested settings stay under their parent, not flattened to top level
+    expect(session).not.toMatch(/^max_concurrent_requests/m)
   })
 
   test('fetches the MFA code using one_password_item', async () => {

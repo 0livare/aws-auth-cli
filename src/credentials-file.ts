@@ -72,7 +72,10 @@ export function upsertSessionSection(
 
   const lines = [
     `[${section}]`,
-    ...Object.entries(values).map(([key, value]) => `${key} = ${value}`),
+    // A value starting with a newline is a block of nested settings (`s3 =`)
+    ...Object.entries(values).map(([key, value]) =>
+      value.startsWith('\n') ? `${key} =${value}` : `${key} = ${value}`,
+    ),
   ]
   const target = sessions.find((b) => b.name === section)
   if (target) target.lines = lines

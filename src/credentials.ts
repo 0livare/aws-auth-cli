@@ -103,6 +103,10 @@ async function parseSections(
   if (!(await file.exists())) return
 
   let section: Map<string, string> | null = null
+  // Key whose value indented lines continue, e.g. the `s3` in
+  //   s3 =
+  //     max_concurrent_requests = 20
+  let lastKey: string | null = null
   for (const line of (await file.text()).split('\n')) {
     const sectionMatch = line.match(/^\[(.+)\]/)
     if (sectionMatch) {
@@ -110,9 +114,22 @@ async function parseSections(
       if (isConfig && name.startsWith('profile ')) name = name.slice(8).trim()
       section = out.get(name) ?? new Map()
       out.set(name, section)
-    } else if (section) {
-      const kv = line.match(/^\s*([^=#;\s]+)\s*=\s*(.*)$/)
-      if (kv) section.set(kv[1], kv[2].trim())
+      lastKey = null
+      continue
+    }
+    if (!section || !line.trim() || /^\s*[#;]/.test(line)) {
+      lastKey = null
+      continue
+    }
+    if (lastKey && /^\s/.test(line)) {
+      // Nested setting: kept verbatim (indentation included) under its parent
+      section.set(lastKey, `${section.get(lastKey)}\n${line.trimEnd()}`)
+      continue
+    }
+    const kv = line.match(/^\s*([^=#;\s]+)\s*=\s*(.*)$/)
+    if (kv) {
+      section.set(kv[1], kv[2].trim())
+      lastKey = kv[1]
     }
   }
 }
