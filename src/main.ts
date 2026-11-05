@@ -8,13 +8,35 @@ import {showTokenStatus} from './token-status'
 import {printError} from './helpers'
 import {
   baseProfileName,
+  clearLastProfile,
+  getLastProfile,
   getSessionExpiry,
+  saveLastProfile,
   isSessionUsable,
   sessionProfileName,
 } from './session'
 import {listSessions} from './list'
 import {checkAwsFiles} from './config-validation'
 import chalk from './chalk'
+
+/**
+ * For ~/.zshrc: point a new shell at the last selected profile while its
+ * session is still valid. Runs on every shell start, so it only reads two
+ * small files (no aws calls, no validation) and never prints to stderr.
+ */
+async function restoreLastProfile() {
+  try {
+    const profile = await getLastProfile()
+    // The output is eval'd, so only accept names that are safe unquoted
+    if (!profile || !/^[\w.@+=,:-]+$/.test(profile)) return
+    if (!isSessionUsable(await getSessionExpiry(profile))) return
+    process.stdout.write(
+      `export AWS_PROFILE=${sessionProfileName(profile)}; unset AWS_DEFAULT_PROFILE\n`,
+    )
+  } catch {
+    // A broken shell startup is worse than starting without a profile
+  }
+}
 
 async function main() {
   const cli = parseCliArgs()
@@ -30,8 +52,14 @@ async function main() {
   }
 
   if (cli.values.clear) {
+    await clearLastProfile()
     process.stderr.write('\x1b[2m  Cleared AWS profile\x1b[0m\n')
     process.stdout.write('unset AWS_PROFILE; unset AWS_DEFAULT_PROFILE\n')
+    process.exit(0)
+  }
+
+  if (cli.values.restore) {
+    await restoreLastProfile()
     process.exit(0)
   }
 
@@ -76,6 +104,7 @@ async function main() {
     process.stdout.write(
       `export AWS_PROFILE=${exportName}; unset AWS_DEFAULT_PROFILE\n`,
     )
+    await saveLastProfile(p)
   }
 
   if (!profile) {

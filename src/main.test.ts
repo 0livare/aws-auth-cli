@@ -197,6 +197,69 @@ describe('multiple signed-in profiles', () => {
   })
 })
 
+describe('--restore', () => {
+  const awsCalls = () => join(home, 'aws-calls.log')
+  const lastFile = () => join(home, '.aws', 'expiry', '.last')
+  const inMinutes = (m: number) => new Date(Date.now() + m * 60_000)
+
+  beforeAll(async () => {
+    await mkdir(join(home, '.aws', 'expiry'), {recursive: true})
+    await Bun.write(
+      join(home, '.aws', 'expiry', 'sandbox'),
+      inMinutes(45).toISOString(),
+    )
+    await Bun.write(
+      join(home, '.aws', 'expiry', 'prod'),
+      inMinutes(-10).toISOString(),
+    )
+  })
+
+  beforeEach(async () => {
+    await rm(lastFile(), {force: true})
+  })
+
+  test('sets the last selected profile while its session is valid', async () => {
+    await run('-p', 'sandbox-session')
+    expect(await Bun.file(lastFile()).text()).toBe('sandbox')
+
+    await rm(awsCalls(), {force: true})
+    const result = await run('--restore')
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout).toBe(exported('sandbox-session'))
+    expect(result.stderr).toBe('')
+    expect(await Bun.file(awsCalls()).exists()).toBe(false)
+  })
+
+  test('does nothing when the last profile has expired', async () => {
+    await run('-p', 'prod')
+    expect(await Bun.file(lastFile()).text()).toBe('prod')
+    const result = await run('--restore')
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout).toBe('')
+    expect(result.stderr).toBe('')
+  })
+
+  test('does nothing when no profile has been selected', async () => {
+    const result = await run('--restore')
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout).toBe('')
+  })
+
+  test('--clear forgets the last profile', async () => {
+    await run('-p', 'sandbox')
+    await run('--clear')
+    expect(await Bun.file(lastFile()).exists()).toBe(false)
+    expect((await run('--restore')).stdout).toBe('')
+  })
+
+  test('ignores a remembered name that is unsafe to eval', async () => {
+    await Bun.write(lastFile(), 'sandbox; rm -rf ~')
+    const result = await run('--restore')
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout).toBe('')
+  })
+})
+
 describe('signing in', () => {
   const awsCalls = () => join(home, 'aws-calls.log')
   const expiryFile = () => join(home, '.aws', 'expiry', 'staging-role')

@@ -54,6 +54,9 @@ export function help() {
     `  ${chalk.cyan('--clear')}                           Unset AWS_PROFILE and AWS_DEFAULT_PROFILE`,
   )
   say(
+    `  ${chalk.cyan('--restore')}                         Set the last used profile if its session is valid`,
+  )
+  say(
     `  ${chalk.cyan('-v')}, ${chalk.cyan('--version')}                       Print version number`,
   )
   say(
@@ -69,5 +72,13 @@ export function help() {
   say(
     `  ${chalk.yellow('aws-auth()')} ${chalk.yellow('{')} eval ${chalk.green('"$(command aws-auth "$@")"')}${chalk.yellow('}')}`,
   )
+  say()
+  say(
+    chalk.dim(
+      '  Optionally, add this line after it so new shells start in your last profile:',
+    ),
+  )
+  say()
+  say(`  ${chalk.green('aws-auth')} ${chalk.cyan('--restore')}`)
   say()
 }

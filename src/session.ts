@@ -1,6 +1,6 @@
 import {homedir} from 'os'
 import {join} from 'path'
-import {mkdir} from 'fs/promises'
+import {mkdir, rm} from 'fs/promises'
 import chalk from './chalk'
 
 // Sessions expiring sooner than this are treated as needing re-authentication
@@ -54,6 +54,24 @@ export async function getSessionExpiries(
 export async function saveSessionExpiry(profile: string, expiresAt: Date) {
   await mkdir(expiryDir(), {recursive: true})
   await Bun.write(join(expiryDir(), profile), expiresAt.toISOString())
+}
+
+/** Holds the role profile last selected in any shell, for --restore */
+const lastProfileFile = () => join(expiryDir(), '.last')
+
+export async function saveLastProfile(profile: string) {
+  await mkdir(expiryDir(), {recursive: true})
+  await Bun.write(lastProfileFile(), baseProfileName(profile))
+}
+
+export async function getLastProfile(): Promise<string | null> {
+  const file = Bun.file(lastProfileFile())
+  if (!(await file.exists())) return null
+  return (await file.text()).trim() || null
+}
+
+export async function clearLastProfile() {
+  await rm(lastProfileFile(), {force: true})
 }
 
 export function isSessionUsable(expiresAt: Date | null): expiresAt is Date {

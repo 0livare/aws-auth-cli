@@ -29,6 +29,9 @@ In order to allow `aws-auth` to modify your shell environment (a subprocess can'
 aws-auth() { eval "$(command aws-auth "$@")"; }
 ```
 
+Optionally, add `aws-auth --restore` on the next line so new shells start in the
+profile you last used (see [below](#starting-new-shells-in-your-last-profile)).
+
 ## Profiles
 
 `aws-auth` works with standard AWS role profiles. Use them exactly as they are:
@@ -159,8 +162,11 @@ aws-auth -p <profile> --force
 # Show every profile and its session status
 aws-auth --list
 
-# Unset the current profile
+# Unset the current profile (and forget it for --restore)
 aws-auth --clear
+
+# Set the last used profile, if its session is still valid
+aws-auth --restore
 ```
 
 ### Multiple signed-in profiles
@@ -173,6 +179,24 @@ MFA token or `aws-auth -p <profile> --force` always re-authenticates.
 
 The interactive picker and `aws-auth --list` show each profile's session status
 (`● 42m left`, `○ expired`, `○ signed out`).
+
+### Starting new shells in your last profile
+
+`AWS_PROFILE` only exists in the shell that ran `aws-auth`, so a new terminal tab
+starts with no profile. To have new shells pick up the profile you last used,
+add `aws-auth --restore` to `~/.zshrc` after the wrapper:
+
+```zsh
+aws-auth() { eval "$(command aws-auth "$@")"; }
+aws-auth --restore
+```
+
+Every time `aws-auth` sets a profile, it remembers it in `~/.aws/expiry/.last`;
+whichever shell set one most recently wins. `--restore` sets that profile only
+while its session has more than 5 minutes left, and otherwise does nothing, so a
+new shell never starts with dead credentials. It reads two small files and
+nothing else (no `aws` calls, no MFA, no output), so it doesn't slow down shell
+startup. `aws-auth --clear` forgets the remembered profile.
 
 ### Selecting by account ID
 
