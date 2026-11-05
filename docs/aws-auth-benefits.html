@@ -1,0 +1,858 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>aws-auth — sign in once, work everywhere</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap"
+  rel="stylesheet"
+/>
+<style>
+  :root {
+    --ink: #13110e;
+    --ink-2: #1c1914;
+    --ink-3: #262219;
+    --paper: #efe6d2;
+    --paper-dim: #a99f8a;
+    --paper-faint: #6d6555;
+    --amber: #ffb547;
+    --amber-deep: #e08a1e;
+    --ok: #9bd88c;
+    --bad: #ff7a66;
+    --rule: rgba(239, 230, 210, 0.14);
+    --serif: 'Instrument Serif', 'Iowan Old Style', Georgia, serif;
+    --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    --ease: cubic-bezier(0.2, 0.7, 0.1, 1);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: var(--mono);
+    font-size: clamp(13px, 1.05vw, 17px);
+    overflow: hidden;
+  }
+
+  /* Film grain + vignette for a darkroom feel */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: -50%;
+    z-index: 50;
+    pointer-events: none;
+    opacity: 0.09;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    animation: grain 1.2s steps(6) infinite;
+  }
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 49;
+    pointer-events: none;
+    background: radial-gradient(ellipse at 50% 40%, transparent 55%, rgba(0, 0, 0, 0.55) 100%);
+  }
+  @keyframes grain {
+    0% { transform: translate(0, 0); }
+    20% { transform: translate(-3%, 2%); }
+    40% { transform: translate(2%, -3%); }
+    60% { transform: translate(-2%, -1%); }
+    80% { transform: translate(3%, 3%); }
+    100% { transform: translate(0, 0); }
+  }
+
+  /* ── Deck chrome ─────────────────────────────────────────── */
+  .deck { position: fixed; inset: 0; }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    padding: 7vh 7vw 9vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.5s var(--ease), visibility 0s linear 0.5s;
+  }
+  .slide.active {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity 0.6s var(--ease);
+  }
+
+  /* Staggered reveal: children get --i via JS */
+  .slide .r {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  .slide.active .r {
+    animation: rise 0.8s var(--ease) forwards;
+    animation-delay: calc(var(--i, 0) * 90ms + 120ms);
+  }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+
+  .chrome {
+    position: fixed;
+    left: 7vw;
+    right: 7vw;
+    bottom: 4vh;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--paper-faint);
+  }
+  .chrome .brand { color: var(--paper-dim); }
+  .chrome .brand b { color: var(--amber); font-weight: 500; }
+  .notes-hint {
+    display: none;
+    align-items: center;
+    gap: 0.55rem;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    color: var(--paper-dim);
+    background: none;
+    border: 1px solid var(--rule);
+    padding: 0 0.8rem;
+    height: 2.2rem;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s, background 0.2s;
+  }
+  .notes-hint:hover { border-color: var(--amber); color: var(--amber); }
+  .notes-hint kbd { font: inherit; border: 1px solid var(--rule); padding: 0 0.35rem; color: var(--paper-faint); }
+  body.has-notes .notes-hint { display: inline-flex; }
+  body.show-notes .notes-hint { color: var(--ink); background: var(--amber); border-color: var(--amber); }
+  body.show-notes .notes-hint kbd { color: var(--ink); border-color: rgba(19, 17, 14, 0.35); }
+
+  /* Speaker notes: hidden unless toggled with N */
+  .notes { display: none; }
+  body.show-notes .slide.active .notes {
+    display: block;
+    position: fixed;
+    z-index: 45;
+    right: 3vw;
+    bottom: 10vh;
+    width: min(34rem, 44vw);
+    max-height: 70vh;
+    overflow-y: auto;
+    padding: 1.4rem 1.6rem;
+    background: rgba(13, 12, 10, 0.97);
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--amber);
+    box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.9);
+    font-size: 0.82rem;
+    line-height: 1.7;
+    color: var(--paper-dim);
+  }
+  .notes h5 {
+    font-weight: 500;
+    font-size: 0.68rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--amber);
+    margin-bottom: 0.9rem;
+  }
+  .notes p, .notes li { margin-bottom: 0.7rem; }
+  .notes ul { padding-left: 1.1rem; }
+  .notes b { color: var(--paper); font-weight: 500; }
+  .notes .q { color: var(--paper); font-style: italic; }
+  .progress {
+    flex: 1;
+    height: 1px;
+    background: var(--rule);
+    position: relative;
+  }
+  .progress i {
+    position: absolute;
+    left: 0;
+    top: -1px;
+    height: 3px;
+    background: var(--amber);
+    transition: width 0.6s var(--ease);
+  }
+  .nav { display: flex; gap: 0.5rem; }
+  .nav button {
+    font: inherit;
+    color: var(--paper-dim);
+    background: none;
+    border: 1px solid var(--rule);
+    width: 2.2rem;
+    height: 2.2rem;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .nav button:hover { border-color: var(--amber); color: var(--amber); }
+  .count { min-width: 4.5rem; text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* ── Type ────────────────────────────────────────────────── */
+  .kicker {
+    font-size: 0.75rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--amber);
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    margin-bottom: 2.2rem;
+  }
+  .kicker::before {
+    content: '';
+    width: 2.4rem;
+    height: 1px;
+    background: var(--amber);
+  }
+  h1, h2 {
+    font-family: var(--serif);
+    font-weight: 400;
+    line-height: 0.92;
+    letter-spacing: -0.01em;
+  }
+  h1 { font-size: clamp(4rem, 11vw, 11.5rem); }
+  h2 { font-size: clamp(2.6rem, 5.4vw, 5.6rem); max-width: 21ch; }
+  h1 em, h2 em { font-style: italic; color: var(--amber); }
+  .lede {
+    margin-top: 2.4rem;
+    max-width: 52ch;
+    line-height: 1.7;
+    color: var(--paper-dim);
+    font-size: 1.05rem;
+  }
+  .lede b { color: var(--paper); font-weight: 500; }
+  code {
+    font-family: var(--mono);
+    color: var(--amber);
+    font-size: 0.95em;
+  }
+
+  /* ── Title slide ─────────────────────────────────────────── */
+  .title-slide h1 .prompt {
+    font-family: var(--mono);
+    font-size: 0.32em;
+    color: var(--amber);
+    vertical-align: 0.9em;
+    margin-right: 0.15em;
+  }
+  .title-slide .cursor {
+    display: inline-block;
+    width: 0.09em;
+    height: 0.78em;
+    background: var(--amber);
+    margin-left: 0.06em;
+    vertical-align: -0.04em;
+    animation: blink 1.05s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  .title-slide .tagline {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: clamp(1.6rem, 2.8vw, 2.8rem);
+    color: var(--paper-dim);
+    margin-top: 1.4rem;
+  }
+  .title-slide .meta {
+    margin-top: 4.5rem;
+    display: flex;
+    gap: 3.5rem;
+    font-size: 0.8rem;
+    color: var(--paper-faint);
+    letter-spacing: 0.06em;
+  }
+  .title-slide .meta span b {
+    display: block;
+    color: var(--paper);
+    font-weight: 500;
+    font-size: 1.6rem;
+    font-family: var(--serif);
+    letter-spacing: 0;
+    margin-bottom: 0.3rem;
+  }
+  .big-glyph {
+    position: absolute;
+    right: -4vw;
+    top: 50%;
+    transform: translateY(-55%);
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 58vh;
+    line-height: 1;
+    color: transparent;
+    -webkit-text-stroke: 1px rgba(255, 181, 71, 0.16);
+    pointer-events: none;
+    user-select: none;
+  }
+
+  /* ── Terminals ───────────────────────────────────────────── */
+  .split {
+    margin-top: 3rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2.2rem;
+  }
+  .term {
+    background: var(--ink-2);
+    border: 1px solid var(--rule);
+    position: relative;
+    box-shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.8);
+  }
+  .term header {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.8rem 1.1rem;
+    border-bottom: 1px solid var(--rule);
+    font-size: 0.7rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--paper-faint);
+  }
+  .term header .tag { color: var(--bad); }
+  .term.good header .tag { color: var(--ok); }
+  .term.good { border-color: rgba(255, 181, 71, 0.45); }
+  .term.good::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-top: 3px solid var(--amber);
+    pointer-events: none;
+  }
+  .term pre {
+    padding: 1.3rem 1.3rem 1.5rem;
+    font-family: var(--mono);
+    font-size: 0.86rem;
+    line-height: 1.85;
+    white-space: pre-wrap;
+    color: var(--paper-dim);
+  }
+  .term pre .l { display: block; opacity: 0; }
+  .slide.active .term pre .l {
+    animation: type 0.35s var(--ease) forwards;
+    animation-delay: calc(var(--d, 0) * 260ms + 700ms);
+  }
+  @keyframes type {
+    from { opacity: 0; transform: translateX(-6px); }
+    to { opacity: 1; transform: none; }
+  }
+  .p { color: var(--amber); }
+  .c { color: var(--paper); }
+  .ok { color: var(--ok); }
+  .bad { color: var(--bad); }
+  .dim { color: var(--paper-faint); }
+  .hl { background: rgba(255, 181, 71, 0.12); color: var(--paper); }
+  .term pre .cap {
+    color: var(--amber);
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    margin-bottom: 0.35rem;
+  }
+  .term pre .cap:not(:first-child) { margin-top: 1.3rem; }
+  .term pre .cap b {
+    display: inline-grid;
+    place-items: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    margin-right: 0.7rem;
+    border: 1px solid var(--amber);
+    border-radius: 50%;
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+  .term pre .note { color: var(--paper-faint); font-style: italic; font-size: 0.8rem; }
+  .term pre .note::before { content: "\21B3  "; font-style: normal; }
+  .term pre .picker {
+    margin: 0.6rem 0 1rem;
+    padding: 0.9rem 0;
+    border-top: 1px dashed var(--rule);
+    border-bottom: 1px dashed var(--rule);
+    line-height: 1.7;
+  }
+  .term pre .sel { color: var(--amber); font-weight: 600; }
+  .term pre .key { color: var(--paper); background: rgba(255, 181, 71, 0.16); }
+
+  /* ── Benefit grid ────────────────────────────────────────── */
+  .grid {
+    margin-top: 3.2rem;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    border-top: 1px solid var(--rule);
+    border-left: 1px solid var(--rule);
+  }
+  .cell {
+    border-right: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    padding: 1.7rem 1.6rem 1.9rem;
+    position: relative;
+    transition: background 0.35s var(--ease);
+  }
+  .cell:hover { background: var(--ink-2); }
+  .cell .n {
+    font-size: 0.7rem;
+    color: var(--paper-faint);
+    letter-spacing: 0.14em;
+  }
+  .cell h3 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: 1.9rem;
+    line-height: 1.05;
+    margin: 0.9rem 0 0.8rem;
+  }
+  .cell h3 em { color: var(--amber); }
+  .cell p { color: var(--paper-dim); line-height: 1.65; font-size: 0.86rem; }
+  .cell::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: -1px;
+    height: 2px;
+    width: 0;
+    background: var(--amber);
+    transition: width 0.5s var(--ease);
+  }
+  .cell:hover::after { width: 100%; }
+
+  /* ── Departures-board list ───────────────────────────────── */
+  .board {
+    margin-top: 3rem;
+    background: #0d0c0a;
+    border: 1px solid var(--rule);
+    padding: 1.2rem 1.6rem 1.4rem;
+    max-width: 62rem;
+  }
+  .board .cmd { color: var(--paper-dim); margin-bottom: 1rem; font-size: 0.9rem; }
+  .board .board-title { color: var(--paper); margin: 0.2rem 0 0.6rem; font-size: 0.9rem; }
+  .board .board-hint { border-top: 1px dashed var(--rule); padding-top: 0.9rem; font-size: 0.8rem; color: var(--paper-faint); white-space: pre; }
+  .board .board-hint .key { color: var(--paper); background: rgba(255, 181, 71, 0.16); padding: 0 0.25rem; }
+  .row {
+    display: grid;
+    grid-template-columns: 1.6rem 1fr 11rem 10rem;
+    align-items: center;
+    padding: 0.85rem 0;
+    border-top: 1px dashed var(--rule);
+    font-size: 1rem;
+  }
+  .row .acct { color: var(--paper-faint); font-size: 0.85rem; }
+  .row .st { text-align: right; font-variant-numeric: tabular-nums; }
+  .row.cur .name { color: var(--amber); font-weight: 600; }
+  .flap {
+    display: inline-block;
+    background: var(--ink-3);
+    padding: 0.12rem 0.5rem;
+    border-radius: 2px;
+    letter-spacing: 0.04em;
+  }
+  .slide.active .flap { animation: flip 0.7s var(--ease) both; animation-delay: calc(var(--i, 0) * 90ms + 500ms); }
+  @keyframes flip {
+    0% { transform: rotateX(90deg); opacity: 0; }
+    60% { transform: rotateX(-12deg); opacity: 1; }
+    100% { transform: none; }
+  }
+  .side-note {
+    margin-top: 2rem;
+    color: var(--paper-dim);
+    max-width: 60ch;
+    line-height: 1.7;
+  }
+
+  /* ── File anatomy ────────────────────────────────────────── */
+  .anatomy {
+    margin-top: 2.6rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    gap: 3rem;
+    align-items: start;
+  }
+  .file {
+    background: var(--ink-2);
+    border: 1px solid var(--rule);
+    font-size: 0.84rem;
+    line-height: 1.75;
+  }
+  .file .zone { padding: 1rem 1.3rem; position: relative; white-space: pre; overflow-x: auto; }
+  .file .zone.gen {
+    background: repeating-linear-gradient(135deg, rgba(255, 181, 71, 0.05) 0 10px, transparent 10px 20px);
+    border-top: 1px dashed rgba(255, 181, 71, 0.5);
+  }
+  .file .gap { height: 3.6rem; display: grid; place-items: center; color: var(--paper-faint); font-size: 0.7rem; letter-spacing: 0.2em; }
+  .file .s { color: var(--paper); }
+  .file .k { color: var(--paper-dim); }
+  .file .com { color: var(--amber-deep); font-style: italic; }
+  .legend { display: grid; gap: 1.8rem; }
+  .legend div { border-left: 2px solid var(--rule); padding-left: 1.2rem; }
+  .legend div.a { border-color: var(--amber); }
+  .legend h4 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: 1.6rem;
+    margin-bottom: 0.4rem;
+  }
+  .legend p { color: var(--paper-dim); line-height: 1.65; font-size: 0.86rem; }
+
+  /* ── Comparison table ────────────────────────────────────── */
+  table {
+    margin-top: 2.6rem;
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.95rem 1rem;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  th {
+    font-weight: 500;
+    font-size: 0.7rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--paper-faint);
+  }
+  td:first-child { color: var(--paper); width: 22%; }
+  td { color: var(--paper-dim); }
+  th.us, td.us {
+    background: rgba(255, 181, 71, 0.07);
+    color: var(--paper);
+  }
+  th.us { color: var(--amber); border-top: 3px solid var(--amber); }
+  .yes { color: var(--ok); }
+  .no { color: var(--bad); }
+  .meh, .m { color: var(--amber-deep); }
+  tbody tr { opacity: 0; }
+  .slide.active tbody tr {
+    animation: rise 0.6s var(--ease) forwards;
+    animation-delay: calc(var(--i, 0) * 80ms + 500ms);
+  }
+
+  /* ── Closing ─────────────────────────────────────────────── */
+  .steps {
+    margin-top: 3rem;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2rem;
+  }
+  .step .num {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 4.5rem;
+    line-height: 1;
+    color: var(--amber);
+  }
+  .step h4 {
+    font-weight: 500;
+    font-size: 0.78rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    margin: 0.8rem 0 1rem;
+  }
+  .step pre {
+    background: var(--ink-2);
+    border: 1px solid var(--rule);
+    padding: 1rem 1.1rem;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    line-height: 1.7;
+    color: var(--paper-dim);
+    white-space: pre-wrap;
+  }
+
+  @media (max-width: 900px) {
+    .split, .anatomy, .steps { grid-template-columns: 1fr; }
+    .grid { grid-template-columns: 1fr 1fr; }
+    .big-glyph { display: none; }
+    html, body { overflow: auto; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .slide .r, .term pre .l, tbody tr { opacity: 1 !important; transform: none !important; }
+  }
+</style>
+</head>
+<body>
+<main class="deck">
+
+  <!-- 1 · Title -->
+  <section class="slide title-slide">
+    <div class="big-glyph" aria-hidden="true">$</div>
+    <div class="kicker r">A better way to sign in to AWS</div>
+    <h1 class="r"><span class="prompt">$</span>aws-auth<span class="cursor"></span></h1>
+    <p class="tagline r">Sign in once. Every tool just works.</p>
+    <div class="meta r">
+      <span><b>1 command</b>to assume any role</span>
+      <span><b>0 MFA prompts</b>in the middle of your work</span>
+      <span><b>∞ profiles</b>signed in at the same time</span>
+    </div>
+    <aside class="notes" aria-label="Speaker notes">
+      <h5>Speaker notes</h5>
+      <ul>
+        <li><code>aws-auth</code> signs in to MFA-protected AWS roles and points <code>AWS_PROFILE</code> at the session.</li>
+        <li>One command, no MFA prompts mid-work, and as many roles signed in at once as you like.</li>
+        <li>Flow: the problem, the fix, the details, a comparison, then setup.</li>
+      </ul>
+    </aside>
+  </section>
+
+  <!-- 2 · The problem -->
+  <section class="slide">
+    <div class="kicker r">The problem</div>
+    <h2 class="r">Signing in to MFA-protected roles <em>gets in the way.</em></h2>
+    <div class="split">
+      <div class="term r">
+        <header><span>Raw aws commands</span><span class="tag">● interrupts you</span></header>
+        <pre><span class="l cap" style="--d:0"><b>1</b>Asks for a code in the middle of your work</span><span class="l" style="--d:1"><span class="p">$</span> <span class="c">export AWS_PROFILE=staging</span></span><span class="l" style="--d:1"><span class="p">$</span> <span class="c">aws s3 ls</span></span><span class="l" style="--d:2">Enter MFA code for arn:aws:iam::…:mfa/me: <span class="hl">▌</span></span><span class="l note" style="--d:2">…and again whenever the cached session expires</span><span class="l cap" style="--d:3"><b>2</b>Tools that can't ask for a code just fail</span><span class="l" style="--d:4"><span class="p">$</span> <span class="c">terraform plan</span></span><span class="l" style="--d:5"><span class="bad">Error: no valid credential sources found</span></span><span class="l note" style="--d:5">Terraform, Docker and most SDKs can't show an MFA prompt</span></pre>
+      </div>
+      <div class="term r">
+        <header><span>Old shell helper</span><span class="tag">● manual &amp; fragile</span></header>
+        <pre><span class="l cap" style="--d:0"><b>3</b>A failed sign-in still switches your profile</span><span class="l" style="--d:1"><span class="p">$</span> <span class="c">aws-profile staging -t 482913</span>  <span class="dim"># code copied by hand</span></span><span class="l" style="--d:2"><span class="bad">ERROR: assume-role returned empty credentials</span></span><span class="l" style="--d:2"><span class="p">$</span> <span class="c">echo $AWS_PROFILE</span></span><span class="l" style="--d:3"><span class="bad">staging</span></span><span class="l note" style="--d:3">You're now pointed at a profile with no working session</span><span class="l cap" style="--d:4"><b>4</b>Settings like region are dropped</span><span class="l" style="--d:5"><span class="p">$</span> <span class="c">aws-profile sandbox -t 771204</span></span><span class="l" style="--d:5"><span class="ok">✓ [sandbox] authenticated</span></span><span class="l" style="--d:6"><span class="p">$</span> <span class="c">aws s3 ls</span></span><span class="l" style="--d:6"><span class="bad">You must specify a region.</span></span><span class="l note" style="--d:6">Only the three keys are written; the role's region is left behind</span></pre>
+      </div>
+    </div>
+    <aside class="notes" aria-label="Speaker notes">
+      <h5>Speaker notes</h5>
+      <ul>
+        <li><b>① ②</b> Raw aws points <code>AWS_PROFILE</code> at the role profile, which has no credentials. Every tool must assume the role and ask for a code itself.</li>
+        <li>The AWS CLI and boto3 can ask; Terraform, Docker and the Node SDK usually can’t. The error text is illustrative.</li>
+        <li><b>③</b> The helper exports <code>AWS_PROFILE</code> before signing in, so a failed sign-in still switches you.</li>
+        <li><b>④</b> The helper writes only the three keys, so the role’s <code>region</code> is lost.</li>
+      </ul>
+    </aside>
+  </section>
+
+  <!-- 3 · The fix -->
+  <section class="slide">
+    <div class="kicker r">With aws-auth</div>
+    <h2 class="r">Pick a role. The code comes <em>from 1Password.</em></h2>
+    <div class="split">
+      <div class="term good r" style="grid-column: 1 / -1; max-width: 64rem">
+        <header><span>aws-auth</span><span class="tag">● signed in</span></header>
+        <pre><span class="l" style="--d:0"><span class="p">$</span> <span class="c">aws-auth</span></span><span class="l picker" style="--d:1"><span class="dim">  Current:</span>  <span class="dim">none</span>
+
+<span class="c">  Select a profile</span>
+<span class="dim">     sandbox        (210987654321)  </span><span class="ok">● 42m left</span>
+<span class="sel">  ❯  staging        (123456789012)  </span><span class="bad">○ expired</span>
+<span class="dim">     nonprod        (345678901234)  </span><span class="dim">○ signed out</span>
+<span class="dim">     prod-admin     (456789012345)  </span><span class="dim">○ signed out</span>
+
+<span class="dim">  ↑↓  navigate   </span><span class="key">⏎  confirm</span><span class="dim">   esc  cancel</span></span><span class="l" style="--d:3"><span class="dim">  Fetching MFA token from 1Password (item: </span><span class="c">AWS MFA</span><span class="dim">, config: [default])…</span></span><span class="l" style="--d:4"><span class="dim">  Assuming role for [staging]…</span></span><span class="l" style="--d:5"><span class="ok">  ✓  [staging] authenticated — expires at 6:42 PM (in 4h 0m)</span></span><span class="l" style="--d:6"> </span><span class="l" style="--d:6"><span class="p">$</span> <span class="c">terraform plan</span>   <span class="ok">✓</span>   <span class="p">$</span> <span class="c">aws s3 ls</span>   <span class="ok">✓</span>   <span class="p">$</span> <span class="c">npm run deploy</span>   <span class="ok">✓</span></span><span class="l note" style="--d:7">No name to remember, no code to type, and every tool sees plain session credentials</span></pre>
+      </div>
+    </div>
+    <aside class="notes" aria-label="Speaker notes">
+      <h5>Speaker notes</h5>
+      <ul>
+        <li>Plain <code>aws-auth</code> opens the picker; the MFA code comes from <code>one_password_item</code>.</li>
+        <li>It signs in once, writes <code>[staging-session]</code>, and exports <code>AWS_PROFILE=staging-session</code>.</li>
+        <li>If 1Password can’t supply a code it prompts you, or pass one directly: <code>aws-auth 123456 -p staging</code>.</li>
+      </ul>
+    </aside>
+  </section>
+
+  <!-- 4 · Benefits -->
+  <section class="slide">
+    <div class="kicker r">What you get</div>
+    <h2 class="r">Six small things that add up to <em>never thinking about it.</em></h2>
+    <div class="grid">
+      <div class="cell r"><div class="n">01</div><h3>No codes to <em>type</em></h3><p>The MFA code is read from 1Password with <code>one_password_item</code>. Set it once under <code>[default]</code> and it covers every role.</p></div>
+      <div class="cell r"><div class="n">02</div><h3>Every tool <em>works</em></h3><p>Sessions are ordinary credentials, so Terraform, Docker, SDKs and scripts work without MFA support of their own.</p></div>
+      <div class="cell r"><div class="n">03</div><h3>Profiles <em>as written</em></h3><p>Standard role profiles work unchanged. No <code>-mfa</code> copies, no renaming, no extra sections to maintain.</p></div>
+      <div class="cell r"><div class="n">04</div><h3>Many roles <em>at once</em></h3><p>Each role keeps its own session. Switching to one that's still valid is instant: no MFA, no network call.</p></div>
+      <div class="cell r"><div class="n">05</div><h3>Settings <em>carried over</em></h3><p><code>region</code>, <code>output</code> and your other settings are copied into the session profile, so nothing goes missing.</p></div>
+      <div class="cell r"><div class="n">06</div><h3>Clear <em>errors</em></h3><p>Broken <code>~/.aws</code> files are caught before anything runs, with the exact line and what's wrong with it.</p></div>
+    </div>
+    <aside class="notes" aria-label="Speaker notes">
+      <h5>Speaker notes</h5>
+      <ul>
+        <li>“Every tool works” is versus raw aws; the old helper also gives tools plain credentials.</li>
+        <li>Only aws-auth: 1Password codes, profiles used as written, settings copied, clear errors, and a failed sign-in never switches you.</li>
+      </ul>
+    </aside>
+  </section>
+
+  <!-- 5 · Sessions board -->
+  <section class="slide">
+    <div class="kicker r">aws-auth</div>
+    <h2 class="r">Every session, <em>at a glance.</em></h2>
+    <div class="board r">
+      <div class="cmd"><span class="p">$</span> aws-auth</div>
+      <div class="board-title">Select a profile</div>
+      <div class="row cur"><span class="p">❯</span><span class="name">staging</span><span class="acct">(123456789012)</span><span class="st"><span class="flap ok" style="--i:0">● 3h 51m left</span></span></div>
+      <div class="row"><span></span><span class="name">sandbox</span><span class="acct">(210987654321)</span><span class="st"><span class="flap ok" style="--i:1">● 42m left</span></span></div>
+      <div class="row"><span></span><span class="name">nonprod</span><span class="acct">(345678901234)</span><span class="st"><span class="flap m" style="--i:2">● 4m left</span></span></div>
+      <div class="row"><span></span><span class="name">prod-admin</span><span class="acct">(456789012345)</span><span class="st"><span class="flap bad" style="--i:3">○ expired</span></span></div>
+      <div class="row"><span></span><span class="name">prod-readonly</span><span class="acct">(456789012345)</span><span class="st"><span class="flap dim" style="--i:4">○ signed out</span></span></div>
+      <div class="board-hint">↑↓ navigate   <span class="key">⏎ confirm</span>   esc cancel</div>
+    </div>
+    <p class="side-note r">Every role and how long its session has left, before you choose. Pick with the arrow keys, or skip the picker with <code>aws-auth -p staging</code> or the account ID, <code>aws-auth -p 123456789012</code>.</p>
+    <aside class="notes" aria-label="Speaker notes">
+      <h5>Speaker notes</h5>
+      <ul>
+        <li>● time left, ○ expired, ○ signed out. Under 5 minutes left counts as expired and signs in again.</li>
+        <li>Switching to a role with a valid session is instant: no MFA, no network call.</li>
+        <li><code>-p</code> takes a name or a 12-digit account ID; an ID shared by several roles shows just those.</li>
+      </ul>
+    </aside>
+  </section>
+
+  <!-- 6 · File anatomy -->
+  <section class="slide">
+    <div class="kicker r">Your credentials file</div>
+    <h2 class="r">Your profiles stay yours. <em>Ours stay at the bottom.</em></h2>
+    <div class="anatomy">
+      <div class="file r">
+        <div class="zone"><span class="s">[iam-user]</span>
+<span class="k">aws_access_key_id = AKIA…</span>
+
+<span class="s">[staging]</span>
+<span class="k">role_arn = arn:aws:iam::123456789012:role/DevRole</span>
+<span class="k">source_profile = iam-user</span>
+<span class="k">mfa_serial = arn:aws:iam::210987654321:mfa/me</span>
+<span class="k">region = us-east-1</span></div>
+        <div class="gap">· · ·</div>
+        <div class="zone gen"><span class="com"># Generated by aws-auth
+# The -session profiles below are rewritten on every sign-in</span>
+<span class="s">[staging-session]</span>
+<span class="k">aws_access_key_id = ASIA…</span>
+<span class="k">aws_session_token = …</span>
+<span class="k">region = us-east-1</span></div>
+      </div>
+      <div class="legend">
+        <div class="r"><h4>Above the line</h4><p>Exactly what you wrote. <code>aws-auth</code> reads your role profiles and never edits them.</p></div>
+        <div class="a r"><h4>Below the line</h4><p>One generated <code>-session</code> profile per role, grouped under a banner. It's a copy of the role's settings plus fresh credentials, rewritten on every sign-in.</p></div>
+        <div class="r"><h4>Why two sections?</h4><p>If session keys sat next to <code>role_arn</code>, the AWS CLI would ignore them and ask for MFA again.</p></div>
+      </div>
+    </div>
+    <aside class="notes" aria-label="Speaker notes">
+      <h5>Speaker notes</h5>
+      <ul>
+        <li>Your sections are only read, never edited.</li>
+        <li>Each <code>-session</code> profile is rewritten in full on sign-in, grouped at the bottom under the banner.</li>
+        <li>Everything is copied except keys that make the CLI fetch credentials itself (<code>role_arn</code>, <code>mfa_serial</code>, <code>source_profile</code>, SSO…).</li>
+      </ul>
+    </aside>
+  </section>
+
+  <!-- 7 · Comparison -->
+  <section class="slide">
+    <div class="kicker r">Side by side</div>
+    <h2 class="r">How it <em>compares.</em></h2>
+    <table class="r">
+      <thead>
+        <tr><th></th><th>Raw aws</th><th>Old shell helper</th><th class="us">aws-auth</th></tr>
+      </thead>
+      <tbody>
+        <tr style="--i:0"><td>MFA code</td><td>Typed mid-command</td><td>Typed as <code>-t</code></td><td class="us"><span class="yes">From 1Password</span>, or typed</td></tr>
+        <tr style="--i:1"><td>Terraform, Docker, SDKs</td><td><span class="no">Often fail</span></td><td><span class="yes">Work</span></td><td class="us"><span class="yes">Work</span></td></tr>
+        <tr style="--i:2"><td>Profile layout</td><td>Standard</td><td><span class="meh">Needs <code>-mfa</code> copies</span></td><td class="us"><span class="yes">Standard, unchanged</span></td></tr>
+        <tr style="--i:3"><td>Region &amp; settings</td><td>Kept</td><td><span class="no">Lost</span></td><td class="us"><span class="yes">Copied over</span></td></tr>
+        <tr style="--i:4"><td>Expired session</td><td>Prompts again</td><td>Warns; you rerun</td><td class="us"><span class="yes">Signs in again on switch</span></td></tr>
+        <tr style="--i:5"><td>See all sessions</td><td><span class="no">—</span></td><td><span class="no">—</span></td><td class="us"><span class="yes"><code>--list</code> &amp; picker</span></td></tr>
+        <tr style="--i:6"><td>Broken config</td><td>"Unable to parse"</td><td><span class="no">Silent</span></td><td class="us"><span class="yes">Line-by-line errors</span></td></tr>
+      </tbody>
+    </table>
+    <aside class="notes" aria-label="Speaker notes">
+      <h5>Speaker notes</h5>
+      <ul>
+        <li>Raw aws is fine if you only ever use the AWS CLI.</li>
+        <li>The helper and aws-auth both give tools plain credentials; aws-auth adds 1Password, standard profiles, copied settings, session status and validation.</li>
+        <li>Migrating from the helper: rename each <code>[x-mfa]</code> section to <code>[x]</code>.</li>
+      </ul>
+    </aside>
+  </section>
+
+  <!-- 8 · Get started -->
+  <section class="slide">
+    <div class="kicker r">Get started</div>
+    <h2 class="r">Three steps. <em>Then forget about it.</em></h2>
+    <div class="steps">
+      <div class="step r"><div class="num">1</div><h4>Install</h4><pre><span class="p">$</span> <span class="c">bun install</span>
+<span class="p">$</span> <span class="c">bun link</span></pre></div>
+      <div class="step r"><div class="num">2</div><h4>Add the wrapper</h4><pre><span class="dim"># ~/.zshrc</span>
+<span class="c">aws-auth() {
+  eval "$(command aws-auth "$@")"
+}</span></pre></div>
+      <div class="step r"><div class="num">3</div><h4>Point at 1Password</h4><pre><span class="dim"># ~/.aws/config</span>
+<span class="c">[default]
+one_password_item = AWS MFA</span></pre></div>
+    </div>
+    <p class="side-note r">Then run <code>aws-auth</code> and pick a role.</p>
+    <aside class="notes" aria-label="Speaker notes">
+      <h5>Speaker notes</h5>
+      <ul>
+        <li>Needs Bun and the AWS CLI; the 1Password CLI is optional (run <code>op signin</code> once).</li>
+        <li>The wrapper exists because a program can’t change its parent shell’s environment.</li>
+        <li><code>one_password_item</code> under <code>[default]</code> covers every role. Keep comments on their own lines in <code>~/.aws</code> files.</li>
+      </ul>
+    </aside>
+  </section>
+
+</main>
+
+<footer class="chrome">
+  <span class="brand"><b>$</b> aws-auth</span>
+  <div class="progress"><i></i></div>
+  <button type="button" class="notes-hint" aria-pressed="false" title="Show or hide speaker notes (N)"><span class="label">Show notes</span><kbd>N</kbd></button>
+  <span class="count"></span>
+  <div class="nav">
+    <button type="button" data-dir="-1" aria-label="Previous slide">←</button>
+    <button type="button" data-dir="1" aria-label="Next slide">→</button>
+  </div>
+</footer>
+
+<script>
+  const slides = [...document.querySelectorAll('.slide')]
+  const bar = document.querySelector('.progress i')
+  const count = document.querySelector('.count')
+  let current = 0
+
+  // Stagger reveal order per slide
+  slides.forEach((s) => s.querySelectorAll('.r').forEach((el, i) => el.style.setProperty('--i', i)))
+
+  function show(n) {
+    current = Math.max(0, Math.min(slides.length - 1, n))
+    slides.forEach((s, i) => s.classList.toggle('active', i === current))
+    bar.style.width = `${((current + 1) / slides.length) * 100}%`
+    count.textContent = `${String(current + 1).padStart(2, '0')} / ${String(slides.length).padStart(2, '0')}`
+    history.replaceState(null, '', `#${current + 1}`)
+    document.body.classList.toggle('has-notes', !!slides[current].querySelector('.notes'))
+  }
+
+  const notesButton = document.querySelector('.notes-hint')
+  function toggleNotes() {
+    const open = document.body.classList.toggle('show-notes')
+    notesButton.setAttribute('aria-pressed', String(open))
+    notesButton.querySelector('.label').textContent = open ? 'Hide notes' : 'Show notes'
+  }
+  notesButton.addEventListener('click', toggleNotes)
+
+  document.addEventListener('keydown', (e) => {
+    if (['ArrowRight', 'PageDown', ' ', 'Enter'].includes(e.key)) { e.preventDefault(); show(current + 1) }
+    if (['ArrowLeft', 'PageUp', 'Backspace'].includes(e.key)) { e.preventDefault(); show(current - 1) }
+    if (e.key === 'Home') show(0)
+    if (e.key === 'End') show(slides.length - 1)
+    if (e.key === 'n' || e.key === 'N') toggleNotes()
+    if (e.key === 'Escape' && document.body.classList.contains('show-notes')) toggleNotes()
+  })
+  document.querySelectorAll('.nav button').forEach((b) =>
+    b.addEventListener('click', () => show(current + Number(b.dataset.dir))),
+  )
+  let touchX = null
+  document.addEventListener('touchstart', (e) => (touchX = e.touches[0].clientX))
+  document.addEventListener('touchend', (e) => {
+    if (touchX === null) return
+    const dx = e.changedTouches[0].clientX - touchX
+    if (Math.abs(dx) > 50) show(current + (dx < 0 ? 1 : -1))
+    touchX = null
+  })
+
+  show((parseInt(location.hash.slice(1), 10) || 1) - 1)
+</script>
+</body>
+</html>
